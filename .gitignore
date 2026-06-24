@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+.ruff_cache/
+.adk/
+app/.adk/
+.google-agents-cli/
+never-sleep-code-team/
