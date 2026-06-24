@@ -1,0 +1,5 @@
+project:
+  name: never_sleep_code_team
+  architecture:
+    agent_type: adk
+    deployment_target: none
