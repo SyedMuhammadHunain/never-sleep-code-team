@@ -25,8 +25,12 @@ class RequirementRequest(BaseModel):
     task: str
 
 
+class FileToWrite(BaseModel):
+    filename: str
+    content: str
+
 class AgentResponse(BaseModel):
-    files_to_write: Dict[str, str]
+    files_to_write: List[FileToWrite]
     clarifying_questions: List[str]
     message_to_user: str
 
@@ -45,15 +49,15 @@ Execute the user's task strictly according to the skill defined below. Do not de
 )
 
 
-def _write_planning_files(files_to_write: Dict[str, str]) -> str:
+def _write_planning_files(files_to_write: List[FileToWrite]) -> str:
     if not files_to_write:
         return ""
         
     status_messages = []
-    for filename, content in files_to_write.items():
-        with open(filename, "w") as file:
-            file.write(content)
-        status_messages.append(f"✅ Successfully created/updated: `{filename}`")
+    for file_obj in files_to_write:
+        with open(file_obj.filename, "w") as file:
+            file.write(file_obj.content)
+        status_messages.append(f"Successfully created/updated: `{file_obj.filename}`")
         
     return "\n".join(status_messages) + "\n"
 
