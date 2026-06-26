@@ -83,6 +83,8 @@ def abort_if_planning_files_exist():
 
 def process_agent_response(node_input) -> Event:
     global _is_first_pass
+    is_initial_run = _is_first_pass
+    
     if _is_first_pass:
         abort_if_planning_files_exist()
         _is_first_pass = False
@@ -112,15 +114,8 @@ def process_agent_response(node_input) -> Event:
             
     if response.message_to_user:
         status_messages.append(f"\nMessage: {response.message_to_user}")
-        
-    # Check Design.md for [Awaiting] placeholders
-    design_path = os.path.join(OUTPUT_DIR, "Design.md")
-    design_content = ""
-    if os.path.exists(design_path):
-        with open(design_path, "r") as f:
-            design_content = f.read()
 
-    if "[Awaiting]" in design_content and response.clarifying_questions:
+    if is_initial_run and response.clarifying_questions:
         status_messages.append("\nEntering Q&A Phase to collect your answers...")
         questions_text = "Please answer the following clarifying questions:\n"
         questions_text += "\n".join([f"{i+1}. {q}" for i, q in enumerate(response.clarifying_questions)])
@@ -140,11 +135,14 @@ def process_agent_response(node_input) -> Event:
 qa_agent = LlmAgent(
     name="qa_agent",
     model="gemini-flash-lite-latest",
-    instruction="""You will receive a list of clarifying questions.
-Your task is to loop through each question ONE BY ONE.
-For EACH question, pause and collect the user's answer using the `human_input` tool.
-Do NOT ask multiple questions at once. Ask the first question, wait for the user's response, then ask the second question, and so on.
-Once you have collected all the answers, output a clear summary of all the Q&A pairs.""",
+    instruction="""You are a QA Agent. You will receive a list of clarifying questions.
+Your task is to ask the user EVERY question on the list ONE BY ONE using the `human_input` tool.
+
+CRITICAL RULES:
+1. NEVER ask a question that you have already asked. Always check your conversation history to see which questions have already been answered.
+2. Ask exactly ONE question at a time using the `human_input` tool.
+3. Wait for the `human_input` tool to return the user's answer before asking the next question.
+4. Once ALL questions from the list have been answered by the user, DO NOT call the tool anymore. Instead, output a clear summary of all the Q&A pairs.""",
     tools=[human_input],
 )
 
