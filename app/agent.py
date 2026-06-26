@@ -3,6 +3,8 @@ from typing import List, Dict
 from pydantic import BaseModel
 from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
+from google.adk.events import Event
+from google.adk.tools._request_input_tool import request_input as human_input
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -62,6 +64,15 @@ requirement_agent = LlmAgent(
 
 
 OUTPUT_DIR = "planning_docs"
+_is_first_pass = True
+_original_task = None
+
+def store_task_node(node_input):
+    global _original_task
+    # Keep original task for later steps if needed
+    _original_task = getattr(node_input, 'text', str(node_input))
+    return node_input
+
 
 def abort_if_planning_files_exist():
     for file_name in FILE_SEQUENCE:
@@ -70,8 +81,11 @@ def abort_if_planning_files_exist():
             raise FileExistsError(f"Abort: Planning file {file_name} already exists in {OUTPUT_DIR}/. Start with a clean workspace.")
 
 
-def process_agent_response(node_input) -> str:
-    abort_if_planning_files_exist()
+def process_agent_response(node_input) -> Event:
+    global _is_first_pass
+    if _is_first_pass:
+        abort_if_planning_files_exist()
+        _is_first_pass = False
     
     # Handle the input being parsed as AgentResponse directly, or as a dictionary.
     response = node_input
@@ -79,7 +93,7 @@ def process_agent_response(node_input) -> str:
         response = AgentResponse(**response)
         
     if not isinstance(response, AgentResponse):
-        return f"System Error: Expected AgentResponse, got {type(response)}"
+        return Event(output=f"System Error: Expected AgentResponse, got {type(response)}", route="done")
         
     status_messages = []
     
@@ -99,14 +113,63 @@ def process_agent_response(node_input) -> str:
     if response.message_to_user:
         status_messages.append(f"\nMessage: {response.message_to_user}")
         
-    return "\n".join(status_messages)
+    # Check Design.md for [Awaiting] placeholders
+    design_path = os.path.join(OUTPUT_DIR, "Design.md")
+    design_content = ""
+    if os.path.exists(design_path):
+        with open(design_path, "r") as f:
+            design_content = f.read()
 
+    if "[Awaiting]" in design_content and response.clarifying_questions:
+        status_messages.append("\nEntering Q&A Phase to collect your answers...")
+        questions_text = "Please answer the following clarifying questions:\n"
+        questions_text += "\n".join([f"{i+1}. {q}" for i, q in enumerate(response.clarifying_questions)])
+        
+        # Route to the QA agent to ask these questions one by one
+        return Event(
+            output=questions_text,
+            route="ask_questions"
+        )
+        
+    # If no [Awaiting] or no questions, we are done
+    return Event(
+        output="\n".join(status_messages),
+        route="done"
+    )
+
+qa_agent = LlmAgent(
+    name="qa_agent",
+    model="gemini-flash-lite-latest",
+    instruction="""You will receive a list of clarifying questions.
+Your task is to loop through each question ONE BY ONE.
+For EACH question, pause and collect the user's answer using the `human_input` tool.
+Do NOT ask multiple questions at once. Ask the first question, wait for the user's response, then ask the second question, and so on.
+Once you have collected all the answers, output a clear summary of all the Q&A pairs.""",
+    tools=[human_input],
+)
+
+def format_update_prompt(node_input):
+    qa_pairs = node_input
+    return f"""Original task: {_original_task}
+
+Based on the original task, you previously generated the planning files.
+Here are the user's answers to the clarifying questions:
+{qa_pairs}
+
+Instruction: Now update Design.md with these answers.
+You must return the full updated Design.md file in your `files_to_write` array.
+Ensure all `[Awaiting]` placeholders are replaced with the concrete details provided by the user.
+"""
 
 root_agent = Workflow(
     name="never_sleep_code_team_workflow",
     edges=[
-        (START, requirement_agent),
-        (requirement_agent, process_agent_response)
+        (START, store_task_node),
+        (store_task_node, requirement_agent),
+        (requirement_agent, process_agent_response),
+        (process_agent_response, {"ask_questions": qa_agent}),
+        (qa_agent, format_update_prompt),
+        (format_update_prompt, requirement_agent)
     ],
     description="A workflow that takes a project idea and generates structured planning documents in sequence.",
 )
