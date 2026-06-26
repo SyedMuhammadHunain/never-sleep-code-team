@@ -1,10 +1,13 @@
 import os
 from typing import List, Dict
+
 from pydantic import BaseModel
 from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
 from google.adk.events import Event
-from google.adk.tools._request_input_tool import request_input as human_input
+from google.adk.events.request_input import RequestInput
+
+OUTPUT_DIR = "planning_docs"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -17,7 +20,9 @@ FILE_SEQUENCE = [
     "Rules.md"
 ]
 
+
 def _load_skill_rules() -> str:
+    """Loads the core instructions from the not-a-vibe-coder skill file."""
     skill_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 
         ".agents", "skills", "not-a-vibe-coder", "SKILL.md"
@@ -63,113 +68,122 @@ requirement_agent = LlmAgent(
 )
 
 
-OUTPUT_DIR = "planning_docs"
-_is_first_pass = True
-_original_task = None
-_pending_questions: List[str] = []
-_qa_pairs: Dict[str, str] = {}
-_current_question: str = ""
-
-def store_task_node(node_input):
-    global _original_task, _is_first_pass, _pending_questions, _qa_pairs
-    # Keep original task for later steps if needed
-    _original_task = getattr(node_input, 'text', str(node_input))
-    _is_first_pass = True
-    _pending_questions.clear()
-    _qa_pairs.clear()
+def store_task_node(ctx, node_input):
+    ctx.state["original_task"] = getattr(node_input, 'text', str(node_input))
+    ctx.state["is_first_pass"] = True
+    ctx.state["pending_questions"] = []
+    ctx.state["qa_pairs"] = {}
     return node_input
 
 
-def abort_if_planning_files_exist():
+def _abort_if_planning_files_exist():
+    """Ensures we do not overwrite existing files on the first run."""
     for file_name in FILE_SEQUENCE:
         file_path = os.path.join(OUTPUT_DIR, file_name)
         if os.path.exists(file_path):
-            raise FileExistsError(f"Abort: Planning file {file_name} already exists in {OUTPUT_DIR}/. Start with a clean workspace.")
+            raise FileExistsError(
+                f"Abort: Planning file {file_name} already exists in {OUTPUT_DIR}/. "
+                "Start with a clean workspace."
+            )
 
 
-def process_agent_response(node_input) -> Event:
-    global _is_first_pass, _pending_questions
-    is_initial_run = _is_first_pass
+def _parse_agent_response(node_input) -> AgentResponse:
+    if isinstance(node_input, dict):
+        return AgentResponse(**node_input)
+    return node_input
+
+
+def _save_planning_files(files_to_write: List[FileToWrite]) -> List[str]:
+    """Saves generated planning files to disk and returns success messages."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    messages = []
     
-    if _is_first_pass:
-        abort_if_planning_files_exist()
-        _is_first_pass = False
-    
-    # Handle the input being parsed as AgentResponse directly, or as a dictionary.
-    response = node_input
-    if isinstance(response, dict):
-        response = AgentResponse(**response)
+    for file_obj in files_to_write:
+        file_path = os.path.join(OUTPUT_DIR, file_obj.filename)
+        with open(file_path, "w") as file:
+            file.write(file_obj.content)
+        messages.append(f"Successfully created/updated: `{file_path}`")
         
+    return messages
+
+
+def _build_status_messages(response: AgentResponse, file_messages: List[str]) -> List[str]:
+    """Compiles status messages including file creations, questions, and agent messages."""
+    messages = list(file_messages)
+    
+    if response.clarifying_questions:
+        messages.append("\nClarifying Questions:")
+        messages.extend(f"- {q}" for q in response.clarifying_questions)
+            
+    if response.message_to_user:
+        messages.append(f"\nMessage: {response.message_to_user}")
+        
+    return messages
+
+
+def process_agent_response(ctx, node_input) -> Event:
+    is_initial_run = ctx.state.get("is_first_pass", True)
+    
+    if is_initial_run:
+        _abort_if_planning_files_exist()
+        ctx.state["is_first_pass"] = False
+    
+    response = _parse_agent_response(node_input)
     if not isinstance(response, AgentResponse):
         return Event(output=f"System Error: Expected AgentResponse, got {type(response)}", route="done")
         
-    status_messages = []
-    
-    if response.files_to_write:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        for file_obj in response.files_to_write:
-            file_path = os.path.join(OUTPUT_DIR, file_obj.filename)
-            with open(file_path, "w") as file:
-                file.write(file_obj.content)
-            status_messages.append(f"Successfully created/updated: `{file_path}`")
-            
-    if response.clarifying_questions:
-        status_messages.append("\nClarifying Questions:")
-        for q in response.clarifying_questions:
-            status_messages.append(f"- {q}")
-            
-    if response.message_to_user:
-        status_messages.append(f"\nMessage: {response.message_to_user}")
+    file_messages = _save_planning_files(response.files_to_write) if response.files_to_write else []
+    status_messages = _build_status_messages(response, file_messages)
 
     if is_initial_run and response.clarifying_questions:
-        _pending_questions = response.clarifying_questions
+        ctx.state["pending_questions"] = response.clarifying_questions.copy()
         status_messages.append("\nEntering Q&A Phase to collect your answers...")
-        return Event(
-            output="\n".join(status_messages),
-            route="ask_questions"
-        )
+        return Event(output="\n".join(status_messages), route="ask_questions")
         
-    # If no [Awaiting] or no questions, we are done
-    return Event(
-        output="\n".join(status_messages),
-        route="done"
-    )
+    return Event(output="\n".join(status_messages), route="done")
 
 
-def ask_questions_node(node_input):
-    from google.adk.events import RequestInput
-    global _pending_questions, _current_question
+def ask_questions_node(ctx, node_input):
+    pending_questions = ctx.state.get("pending_questions", [])
     
-    if not _pending_questions:
+    if not pending_questions:
         return Event(output=None, route="finished")
         
-    _current_question = _pending_questions[0]
-    return RequestInput(message=_current_question)
-
-def save_answer_node(node_input):
-    from google.adk.events import Event
-    global _pending_questions, _qa_pairs, _current_question
+    current_question = pending_questions[0]
+    ctx.state["current_question"] = current_question
     
-    # The node_input is the user's answer from the UI
+    return RequestInput(message=current_question)
+
+
+def save_answer_node(ctx, node_input):
     answer = getattr(node_input, 'text', str(node_input))
-    _qa_pairs[_current_question] = answer
+    current_question = ctx.state.get("current_question")
     
-    _pending_questions.pop(0)
+    qa_pairs = ctx.state.get("qa_pairs", {})
+    qa_pairs[current_question] = answer
+    ctx.state["qa_pairs"] = qa_pairs
     
-    if _pending_questions:
+    pending_questions = ctx.state.get("pending_questions", [])
+    if pending_questions:
+        pending_questions.pop(0)
+    ctx.state["pending_questions"] = pending_questions
+    
+    if pending_questions:
         return Event(output=None, route="ask_more")
-    else:
-        return Event(output=_qa_pairs, route="finished")
-
-
-def format_update_prompt(node_input):
-    qa_pairs = node_input
     
-    formatted_qa = ""
-    for q, a in qa_pairs.items():
-        formatted_qa += f"Q: {q}\nA: {a}\n\n"
+    return Event(output=qa_pairs, route="finished")
+
+
+def format_update_prompt(ctx, node_input):
+    qa_pairs = node_input
+    original_task = ctx.state.get("original_task", "")
+    
+    formatted_qa = "".join(
+        f"Q: {q}\nA: {a}\n\n" 
+        for q, a in qa_pairs.items()
+    )
         
-    return f"""Original task: {_original_task}
+    return f"""Original task: {original_task}
 
 Based on the original task, you previously generated the planning files.
 Here are the user's answers to the clarifying questions:
@@ -180,6 +194,7 @@ Instruction: Now update Design.md with these answers.
 You must return the full updated Design.md file in your `files_to_write` array.
 Ensure that the Design.md file is updated on the disk based on the new inputs from the user.
 """
+
 
 root_agent = Workflow(
     name="never_sleep_code_team_workflow",
