@@ -7,6 +7,7 @@ from google.adk.agents import LlmAgent
 from google.adk.events import Event
 from google.adk.events.request_input import RequestInput
 from app.architecture_agent import architecture_agent
+from app.ui_ux_designer_agent import ui_ux_designer_agent
 from app.schemas import FileToWrite, AgentResponse
 
 OUTPUT_DIR = "planning_docs"
@@ -215,8 +216,43 @@ def process_arch_response(ctx, node_input) -> Event:
     if getattr(response, 'message_to_user', None):
         status_messages.append(f"\nArchitecture Agent Message: {response.message_to_user}")
         
-    status_messages.append("\nArchitecture generation is complete.")
+    status_messages.append("\nArchitecture generation is complete. Proceeding to UI/UX Design...")
+    return Event(output="\n".join(status_messages), route="ui_ux_phase")
+
+
+def prepare_ui_ux_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = ""
+    
+    # Send all planning docs including Architecture.md to the UI UX agent
+    for filename in FILE_SEQUENCE + ["Architecture.md"]:
+        filepath = os.path.join(OUTPUT_DIR, filename)
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+    
+    prompt = f"Original User Task: {original_task}\n\nThe architecture phase is now complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the UI/UX specifications and design documents via `files_to_write`."
+    return prompt
+
+
+def process_ui_ux_response(ctx, node_input) -> Event:
+    if isinstance(node_input, dict):
+        response = AgentResponse(**node_input)
+    else:
+        response = node_input
+        
+    if not hasattr(response, 'files_to_write'):
+        return Event(output=f"System Error: Expected AgentResponse, got {type(response)}")
+        
+    file_messages = _save_planning_files(response.files_to_write) if getattr(response, 'files_to_write', None) else []
+    
+    status_messages = list(file_messages)
+    if getattr(response, 'message_to_user', None):
+        status_messages.append(f"\nUI/UX Agent Message: {response.message_to_user}")
+        
+    status_messages.append("\nUI/UX Design generation is complete. Workflow finished!")
     return Event(output="\n".join(status_messages))
+
 
 
 root_agent = Workflow(
@@ -230,7 +266,10 @@ root_agent = Workflow(
         (save_answer_node, {"ask_more": ask_questions_node, "finished": format_update_prompt}),
         (format_update_prompt, requirement_agent),
         (prepare_architecture_prompt, architecture_agent),
-        (architecture_agent, process_arch_response)
+        (architecture_agent, process_arch_response),
+        (process_arch_response, {"ui_ux_phase": prepare_ui_ux_prompt}),
+        (prepare_ui_ux_prompt, ui_ux_designer_agent),
+        (ui_ux_designer_agent, process_ui_ux_response)
     ],
-    description="A workflow that takes a project idea, generates structured planning documents, and then designs the architecture.",
+    description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, and creates UI/UX specs.",
 )
