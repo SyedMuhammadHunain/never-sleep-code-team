@@ -9,8 +9,9 @@ from google.adk.events.request_input import RequestInput
 from app.architecture_agent import architecture_agent
 from app.ui_ux_designer_agent import ui_ux_designer_agent
 from app.schemas import FileToWrite, AgentResponse
-
-OUTPUT_DIR = "planning_docs"
+REQ_OUTPUT_DIR = "Output/requirement_agent_output_files"
+ARCH_OUTPUT_DIR = "Output/Architecture_output_files"
+UI_UX_OUTPUT_DIR = "Output/ui_ux_designer_output_files"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -67,30 +68,19 @@ def store_task_node(ctx, node_input):
     return node_input
 
 
-def _abort_if_planning_files_exist():
-    """Ensures we do not overwrite existing files on the first run."""
-    for file_name in FILE_SEQUENCE:
-        file_path = os.path.join(OUTPUT_DIR, file_name)
-        if os.path.exists(file_path):
-            raise FileExistsError(
-                f"Abort: Planning file {file_name} already exists in {OUTPUT_DIR}/. "
-                "Start with a clean workspace."
-            )
-
-
 def _parse_agent_response(node_input) -> AgentResponse:
     if isinstance(node_input, dict):
         return AgentResponse(**node_input)
     return node_input
 
 
-def _save_planning_files(files_to_write: List[FileToWrite]) -> List[str]:
-    """Saves generated planning files to disk and returns success messages."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+def _save_planning_files(files_to_write: List[FileToWrite], output_dir: str) -> List[str]:
+    """Saves generated files to disk in the specified output directory and returns success messages."""
+    os.makedirs(output_dir, exist_ok=True)
     messages = []
     
     for file_obj in files_to_write:
-        file_path = os.path.join(OUTPUT_DIR, file_obj.filename)
+        file_path = os.path.join(output_dir, file_obj.filename)
         with open(file_path, "w") as file:
             file.write(file_obj.content)
         messages.append(f"Successfully created/updated: `{file_path}`")
@@ -116,14 +106,13 @@ def process_agent_response(ctx, node_input) -> Event:
     is_initial_run = ctx.state.get("is_first_pass", True)
     
     if is_initial_run:
-        _abort_if_planning_files_exist()
         ctx.state["is_first_pass"] = False
     
     response = _parse_agent_response(node_input)
     if not isinstance(response, AgentResponse):
         return Event(output=f"System Error: Expected AgentResponse, got {type(response)}", route="done")
         
-    file_messages = _save_planning_files(response.files_to_write) if response.files_to_write else []
+    file_messages = _save_planning_files(response.files_to_write, REQ_OUTPUT_DIR) if response.files_to_write else []
     status_messages = _build_status_messages(response, file_messages)
 
     if is_initial_run and response.clarifying_questions:
@@ -192,7 +181,7 @@ def prepare_architecture_prompt(ctx, node_input):
     planning_docs = ""
     
     for filename in FILE_SEQUENCE:
-        filepath = os.path.join(OUTPUT_DIR, filename)
+        filepath = os.path.join(REQ_OUTPUT_DIR, filename)
         if os.path.exists(filepath):
             with open(filepath, "r") as f:
                 planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
@@ -210,7 +199,7 @@ def process_arch_response(ctx, node_input) -> Event:
     if not hasattr(response, 'files_to_write'):
         return Event(output=f"System Error: Expected AgentResponse, got {type(response)}")
         
-    file_messages = _save_planning_files(response.files_to_write) if getattr(response, 'files_to_write', None) else []
+    file_messages = _save_planning_files(response.files_to_write, ARCH_OUTPUT_DIR) if getattr(response, 'files_to_write', None) else []
     
     status_messages = list(file_messages)
     if getattr(response, 'message_to_user', None):
@@ -225,11 +214,16 @@ def prepare_ui_ux_prompt(ctx, node_input):
     planning_docs = ""
     
     # Send all planning docs including Architecture.md to the UI UX agent
-    for filename in FILE_SEQUENCE + ["Architecture.md"]:
-        filepath = os.path.join(OUTPUT_DIR, filename)
+    for filename in FILE_SEQUENCE:
+        filepath = os.path.join(REQ_OUTPUT_DIR, filename)
         if os.path.exists(filepath):
             with open(filepath, "r") as f:
                 planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+                
+    arch_filepath = os.path.join(ARCH_OUTPUT_DIR, "Architecture.md")
+    if os.path.exists(arch_filepath):
+        with open(arch_filepath, "r") as f:
+            planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
     
     prompt = f"Original User Task: {original_task}\n\nThe architecture phase is now complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the UI/UX specifications and design documents via `files_to_write`."
     return prompt
@@ -244,7 +238,7 @@ def process_ui_ux_response(ctx, node_input) -> Event:
     if not hasattr(response, 'files_to_write'):
         return Event(output=f"System Error: Expected AgentResponse, got {type(response)}")
         
-    file_messages = _save_planning_files(response.files_to_write) if getattr(response, 'files_to_write', None) else []
+    file_messages = _save_planning_files(response.files_to_write, UI_UX_OUTPUT_DIR) if getattr(response, 'files_to_write', None) else []
     
     status_messages = list(file_messages)
     if getattr(response, 'message_to_user', None):
