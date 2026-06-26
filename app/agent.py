@@ -7,6 +7,7 @@ from google.adk.agents import LlmAgent
 from google.adk.events import Event
 from google.adk.events.request_input import RequestInput
 from app.architecture_agent import architecture_agent
+from app.schemas import FileToWrite, AgentResponse
 
 OUTPUT_DIR = "planning_docs"
 
@@ -23,7 +24,6 @@ FILE_SEQUENCE = [
 
 
 def _load_skill_rules() -> str:
-    """Loads the core instructions from the not-a-vibe-coder skill file."""
     skill_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 
         ".agents", "skills", "not-a-vibe-coder", "SKILL.md"
@@ -37,17 +37,6 @@ def _load_skill_rules() -> str:
         
     with open(skill_path, "r") as skill_file:
         return skill_file.read()
-
-
-class FileToWrite(BaseModel):
-    filename: str
-    content: str
-
-
-class AgentResponse(BaseModel):
-    files_to_write: List[FileToWrite]
-    clarifying_questions: List[str]
-    message_to_user: str
 
 
 instruction = f"""You are the Requirement Agent.
@@ -212,15 +201,13 @@ def prepare_architecture_prompt(ctx, node_input):
 
 
 def process_arch_response(ctx, node_input) -> Event:
-    from app.architecture_agent import AgentResponse as ArchAgentResponse
-    
     if isinstance(node_input, dict):
-        response = ArchAgentResponse(**node_input)
+        response = AgentResponse(**node_input)
     else:
         response = node_input
         
     if not hasattr(response, 'files_to_write'):
-        return Event(output=f"System Error: Expected ArchAgentResponse, got {type(response)}")
+        return Event(output=f"System Error: Expected AgentResponse, got {type(response)}")
         
     file_messages = _save_planning_files(response.files_to_write) if getattr(response, 'files_to_write', None) else []
     
