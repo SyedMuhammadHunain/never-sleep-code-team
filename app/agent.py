@@ -66,11 +66,17 @@ requirement_agent = LlmAgent(
 OUTPUT_DIR = "planning_docs"
 _is_first_pass = True
 _original_task = None
+_pending_questions: List[str] = []
+_qa_pairs: Dict[str, str] = {}
+_current_question: str = ""
 
 def store_task_node(node_input):
-    global _original_task
+    global _original_task, _is_first_pass, _pending_questions, _qa_pairs
     # Keep original task for later steps if needed
     _original_task = getattr(node_input, 'text', str(node_input))
+    _is_first_pass = True
+    _pending_questions.clear()
+    _qa_pairs.clear()
     return node_input
 
 
@@ -82,7 +88,7 @@ def abort_if_planning_files_exist():
 
 
 def process_agent_response(node_input) -> Event:
-    global _is_first_pass
+    global _is_first_pass, _pending_questions
     is_initial_run = _is_first_pass
     
     if _is_first_pass:
@@ -116,13 +122,10 @@ def process_agent_response(node_input) -> Event:
         status_messages.append(f"\nMessage: {response.message_to_user}")
 
     if is_initial_run and response.clarifying_questions:
+        _pending_questions = response.clarifying_questions
         status_messages.append("\nEntering Q&A Phase to collect your answers...")
-        questions_text = "Please answer the following clarifying questions:\n"
-        questions_text += "\n".join([f"{i+1}. {q}" for i, q in enumerate(response.clarifying_questions)])
-        
-        # Route to the QA agent to ask these questions one by one
         return Event(
-            output=questions_text,
+            output="\n".join(status_messages),
             route="ask_questions"
         )
         
@@ -132,31 +135,50 @@ def process_agent_response(node_input) -> Event:
         route="done"
     )
 
-qa_agent = LlmAgent(
-    name="qa_agent",
-    model="gemini-flash-lite-latest",
-    instruction="""You are a QA Agent. You will receive a list of clarifying questions.
-Your task is to ask the user EVERY question on the list ONE BY ONE using the `human_input` tool.
 
-CRITICAL RULES:
-1. NEVER ask a question that you have already asked. Always check your conversation history to see which questions have already been answered.
-2. Ask exactly ONE question at a time using the `human_input` tool.
-3. Wait for the `human_input` tool to return the user's answer before asking the next question.
-4. Once ALL questions from the list have been answered by the user, DO NOT call the tool anymore. Instead, output a clear summary of all the Q&A pairs.""",
-    tools=[human_input],
-)
+def ask_questions_node(node_input):
+    from google.adk.events import RequestInput
+    global _pending_questions, _current_question
+    
+    if not _pending_questions:
+        return Event(output=None, route="finished")
+        
+    _current_question = _pending_questions[0]
+    return RequestInput(message=_current_question)
+
+def save_answer_node(node_input):
+    from google.adk.events import Event
+    global _pending_questions, _qa_pairs, _current_question
+    
+    # The node_input is the user's answer from the UI
+    answer = getattr(node_input, 'text', str(node_input))
+    _qa_pairs[_current_question] = answer
+    
+    _pending_questions.pop(0)
+    
+    if _pending_questions:
+        return Event(output=None, route="ask_more")
+    else:
+        return Event(output=_qa_pairs, route="finished")
+
 
 def format_update_prompt(node_input):
     qa_pairs = node_input
+    
+    formatted_qa = ""
+    for q, a in qa_pairs.items():
+        formatted_qa += f"Q: {q}\nA: {a}\n\n"
+        
     return f"""Original task: {_original_task}
 
 Based on the original task, you previously generated the planning files.
 Here are the user's answers to the clarifying questions:
-{qa_pairs}
+
+{formatted_qa}
 
 Instruction: Now update Design.md with these answers.
 You must return the full updated Design.md file in your `files_to_write` array.
-Ensure all `[Awaiting]` placeholders are replaced with the concrete details provided by the user.
+Ensure that the Design.md file is updated on the disk based on the new inputs from the user.
 """
 
 root_agent = Workflow(
@@ -165,8 +187,9 @@ root_agent = Workflow(
         (START, store_task_node),
         (store_task_node, requirement_agent),
         (requirement_agent, process_agent_response),
-        (process_agent_response, {"ask_questions": qa_agent}),
-        (qa_agent, format_update_prompt),
+        (process_agent_response, {"ask_questions": ask_questions_node}),
+        (ask_questions_node, save_answer_node),
+        (save_answer_node, {"ask_more": ask_questions_node, "finished": format_update_prompt}),
         (format_update_prompt, requirement_agent)
     ],
     description="A workflow that takes a project idea and generates structured planning documents in sequence.",
