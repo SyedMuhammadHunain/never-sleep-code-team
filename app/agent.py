@@ -6,6 +6,7 @@ from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
 from google.adk.events import Event
 from google.adk.events.request_input import RequestInput
+from app.architecture_agent import architecture_agent
 
 OUTPUT_DIR = "planning_docs"
 
@@ -196,16 +197,53 @@ Ensure that the Design.md file is updated on the disk based on the new inputs fr
 """
 
 
+def prepare_architecture_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = ""
+    
+    for filename in FILE_SEQUENCE:
+        filepath = os.path.join(OUTPUT_DIR, filename)
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+    
+    prompt = f"Original User Task: {original_task}\n\nThe requirement phase is now complete. Below are the generated planning documents:\n\n{planning_docs}\n\nPlease generate the software architecture and save it via `files_to_write`."
+    return prompt
+
+
+def process_arch_response(ctx, node_input) -> Event:
+    from app.architecture_agent import AgentResponse as ArchAgentResponse
+    
+    if isinstance(node_input, dict):
+        response = ArchAgentResponse(**node_input)
+    else:
+        response = node_input
+        
+    if not hasattr(response, 'files_to_write'):
+        return Event(output=f"System Error: Expected ArchAgentResponse, got {type(response)}")
+        
+    file_messages = _save_planning_files(response.files_to_write) if getattr(response, 'files_to_write', None) else []
+    
+    status_messages = list(file_messages)
+    if getattr(response, 'message_to_user', None):
+        status_messages.append(f"\nArchitecture Agent Message: {response.message_to_user}")
+        
+    status_messages.append("\nArchitecture generation is complete.")
+    return Event(output="\n".join(status_messages))
+
+
 root_agent = Workflow(
     name="never_sleep_code_team_workflow",
     edges=[
         (START, store_task_node),
         (store_task_node, requirement_agent),
         (requirement_agent, process_agent_response),
-        (process_agent_response, {"ask_questions": ask_questions_node}),
+        (process_agent_response, {"ask_questions": ask_questions_node, "done": prepare_architecture_prompt}),
         (ask_questions_node, save_answer_node),
         (save_answer_node, {"ask_more": ask_questions_node, "finished": format_update_prompt}),
-        (format_update_prompt, requirement_agent)
+        (format_update_prompt, requirement_agent),
+        (prepare_architecture_prompt, architecture_agent),
+        (architecture_agent, process_arch_response)
     ],
-    description="A workflow that takes a project idea and generates structured planning documents in sequence.",
+    description="A workflow that takes a project idea, generates structured planning documents, and then designs the architecture.",
 )
