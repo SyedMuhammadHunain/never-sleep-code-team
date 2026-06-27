@@ -1,0 +1,15 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "performance_analysis_1",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Design a highly performant and scalable e-commerce backend API. Ensure it uses proper caching and distributed tracing."
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -15,6 +15,7 @@ from app.coder_agent import coder_agent
 from app.test_writer_agent import test_writer_agent
 from app.debugger_agent import debugger_agent
 from app.security_agent import security_agent
+from app.performance_agent import performance_agent
 from app.schemas import FileToWrite, AgentResponse
 
 REQ_OUTPUT_DIR = "Output/requirement_agent_output_files"
@@ -26,6 +27,7 @@ CODER_OUTPUT_DIR = "Output/coder_output_files"
 TEST_WRITER_OUTPUT_DIR = "Output/test_writer_output_files"
 DEBUGGER_OUTPUT_DIR = "Output/debugger_output_files"
 SECURITY_OUTPUT_DIR = "Output/security_output_files"
+PERFORMANCE_OUTPUT_DIR = "Output/performance_output_files"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -697,7 +699,9 @@ def process_security_response(ctx, node_input) -> Event:
         )
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
-    status_messages.append("\nSecurity Phase is complete. Workflow finished!")
+    status_messages.append(
+        "\nSecurity Phase is complete. Proceeding to Performance Analysis..."
+    )
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
@@ -720,6 +724,82 @@ Here are the user's answers to the clarifying questions:
 {formatted_qa}
 
 Instruction: Now update the security documents with these answers.
+You must return the full updated files in your `files_to_write` array.
+"""
+
+
+def prepare_performance_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+            DEBUGGER_OUTPUT_DIR,
+            SECURITY_OUTPUT_DIR,
+        ]
+    )
+    prompt = f"Original User Task: {original_task}\n\nThe security analysis phase is complete. Below are the project documents and implementation files:\n\n{planning_docs}\n\nPlease begin performance analysis and optimization following the Performance Agent instructions."
+    return prompt
+
+
+def process_performance_response(ctx, node_input) -> Event:
+    is_initial_run = ctx.state.get("is_performance_first_pass", True)
+
+    if is_initial_run:
+        ctx.state["is_performance_first_pass"] = False
+        ctx.state["performance_qa_pairs"] = {}
+
+    response = _parse_agent_response(node_input)
+
+    if not isinstance(response, AgentResponse):
+        return Event(
+            output=f"System Error: Expected AgentResponse, got {type(response)}"
+        )
+
+    file_messages = (
+        _save_planning_files(response.files_to_write, PERFORMANCE_OUTPUT_DIR)
+        if getattr(response, "files_to_write", None)
+        else []
+    )
+
+    status_messages = _build_status_messages(response, file_messages)
+
+    if is_initial_run and getattr(response, "clarifying_questions", None):
+        ctx.state["performance_pending_questions"] = (
+            response.clarifying_questions.copy()
+        )
+        status_messages.append(
+            "\nEntering Performance Q&A Phase to collect your answers..."
+        )
+        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
+
+    status_messages.append("\nPerformance Phase is complete. Workflow finished!")
+    return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def ask_performance_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "performance_")
+
+
+def save_performance_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "performance_")
+
+
+def format_performance_update_prompt(ctx, node_input):
+    qa_pairs = node_input
+
+    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
+
+    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
+Here are the user's answers to the clarifying questions:
+
+{formatted_qa}
+
+Instruction: Now update the performance documents with these answers.
 You must return the full updated files in your `files_to_write` array.
 """
 
@@ -846,7 +926,7 @@ root_agent = Workflow(
             process_security_response,
             {
                 "ask_questions": ask_security_questions_node,
-                "done": end_workflow_node,
+                "done": prepare_performance_prompt,
             },
         ),
         (ask_security_questions_node, save_security_answer_node),
@@ -858,6 +938,24 @@ root_agent = Workflow(
             },
         ),
         (format_security_update_prompt, security_agent),
+        (prepare_performance_prompt, performance_agent),
+        (performance_agent, process_performance_response),
+        (
+            process_performance_response,
+            {
+                "ask_questions": ask_performance_questions_node,
+                "done": end_workflow_node,
+            },
+        ),
+        (ask_performance_questions_node, save_performance_answer_node),
+        (
+            save_performance_answer_node,
+            {
+                "ask_more": ask_performance_questions_node,
+                "finished": format_performance_update_prompt,
+            },
+        ),
+        (format_performance_update_prompt, performance_agent),
     ],
     description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan.",
 )
