@@ -13,6 +13,7 @@ from app.task_planner_agent import task_planner_agent
 from app.env_setup_agent import env_setup_agent
 from app.coder_agent import coder_agent
 from app.test_writer_agent import test_writer_agent
+from app.debugger_agent import debugger_agent
 from app.schemas import FileToWrite, AgentResponse
 
 REQ_OUTPUT_DIR = "Output/requirement_agent_output_files"
@@ -22,6 +23,7 @@ TASK_PLAN_OUTPUT_DIR = "Output/task_planner_output_files"
 ENV_SETUP_OUTPUT_DIR = "Output/env_setup_output_files"
 CODER_OUTPUT_DIR = "Output/coder_output_files"
 TEST_WRITER_OUTPUT_DIR = "Output/test_writer_output_files"
+DEBUGGER_OUTPUT_DIR = "Output/debugger_output_files"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -98,6 +100,7 @@ def _save_planning_files(
 
     for file_obj in files_to_write:
         file_path = os.path.join(output_dir, file_obj.filename)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w") as file:
             file.write(file_obj.content)
         messages.append(f"Successfully created/updated: `{file_path}`")
@@ -543,7 +546,9 @@ def process_test_writer_response(ctx, node_input) -> Event:
         )
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
-    status_messages.append("\nTest Writing Phase is complete. Workflow finished!")
+    status_messages.append(
+        "\nTest Writing Phase is complete. Proceeding to Debugging..."
+    )
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
@@ -566,6 +571,78 @@ Here are the user's answers to the clarifying questions:
 {formatted_qa}
 
 Instruction: Now update the test files with these answers.
+You must return the full updated files in your `files_to_write` array.
+"""
+
+
+def prepare_debugger_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+        ]
+    )
+    prompt = f"Original User Task: {original_task}\n\nThe test writing phase is complete. Below are the project documents and implementation files:\n\n{planning_docs}\n\nPlease begin debugging following the Debugger Agent instructions."
+    return prompt
+
+
+def process_debugger_response(ctx, node_input) -> Event:
+    is_initial_run = ctx.state.get("is_debugger_first_pass", True)
+
+    if is_initial_run:
+        ctx.state["is_debugger_first_pass"] = False
+        ctx.state["debugger_qa_pairs"] = {}
+
+    response = _parse_agent_response(node_input)
+
+    if not isinstance(response, AgentResponse):
+        return Event(
+            output=f"System Error: Expected AgentResponse, got {type(response)}"
+        )
+
+    file_messages = (
+        _save_planning_files(response.files_to_write, DEBUGGER_OUTPUT_DIR)
+        if getattr(response, "files_to_write", None)
+        else []
+    )
+
+    status_messages = _build_status_messages(response, file_messages)
+
+    if is_initial_run and getattr(response, "clarifying_questions", None):
+        ctx.state["debugger_pending_questions"] = response.clarifying_questions.copy()
+        status_messages.append(
+            "\nEntering Debugging Q&A Phase to collect your answers..."
+        )
+        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
+
+    status_messages.append("\nDebugging Phase is complete. Workflow finished!")
+    return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def ask_debugger_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "debugger_")
+
+
+def save_debugger_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "debugger_")
+
+
+def format_debugger_update_prompt(ctx, node_input):
+    qa_pairs = node_input
+
+    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
+
+    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
+Here are the user's answers to the clarifying questions:
+
+{formatted_qa}
+
+Instruction: Now update the code with these answers.
 You must return the full updated files in your `files_to_write` array.
 """
 
@@ -656,7 +733,7 @@ root_agent = Workflow(
             process_test_writer_response,
             {
                 "ask_questions": ask_test_writer_questions_node,
-                "done": end_workflow_node,
+                "done": prepare_debugger_prompt,
             },
         ),
         (ask_test_writer_questions_node, save_test_writer_answer_node),
@@ -668,6 +745,24 @@ root_agent = Workflow(
             },
         ),
         (format_test_writer_update_prompt, test_writer_agent),
+        (prepare_debugger_prompt, debugger_agent),
+        (debugger_agent, process_debugger_response),
+        (
+            process_debugger_response,
+            {
+                "ask_questions": ask_debugger_questions_node,
+                "done": end_workflow_node,
+            },
+        ),
+        (ask_debugger_questions_node, save_debugger_answer_node),
+        (
+            save_debugger_answer_node,
+            {
+                "ask_more": ask_debugger_questions_node,
+                "finished": format_debugger_update_prompt,
+            },
+        ),
+        (format_debugger_update_prompt, debugger_agent),
     ],
     description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan.",
 )

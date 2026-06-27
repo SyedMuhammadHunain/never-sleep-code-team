@@ -1,4 +1,4 @@
-from google.adk.agents import Agent
+from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
@@ -14,7 +14,7 @@ You must act as the Test Writer Agent, strictly follow the skill document to wri
 Output the resulting test code via the `files_to_write` array in your AgentResponse.
 """
 
-test_writer_agent = Agent(
+test_writer_agent = LlmAgent(
     name="test_writer_agent",
     model="gemini-flash-lite-latest",
     instruction=instruction,

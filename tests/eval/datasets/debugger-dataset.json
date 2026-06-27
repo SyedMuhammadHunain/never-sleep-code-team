@@ -1,0 +1,11 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "debugger_basic_app",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Debug the issue in the basic to-do list application where tasks are not being added properly."}]
+      }
+    }
+  ]
+}
