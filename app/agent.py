@@ -279,6 +279,12 @@ def prepare_task_planner_prompt(ctx, node_input):
 
 
 def process_task_planner_response(ctx, node_input) -> Event:
+    is_initial_run = ctx.state.get("is_task_planner_first_pass", True)
+    
+    if is_initial_run:
+        ctx.state["is_task_planner_first_pass"] = False
+        ctx.state["task_planner_qa_pairs"] = {}
+        
     if isinstance(node_input, dict):
         response = AgentResponse(**node_input)
     else:
@@ -289,12 +295,65 @@ def process_task_planner_response(ctx, node_input) -> Event:
         
     file_messages = _save_planning_files(response.files_to_write, TASK_PLAN_OUTPUT_DIR) if getattr(response, 'files_to_write', None) else []
     
-    status_messages = list(file_messages)
-    if getattr(response, 'message_to_user', None):
-        status_messages.append(f"\nTask Planner Agent Message: {response.message_to_user}")
-        
+    status_messages = _build_status_messages(response, file_messages)
+    
+    if is_initial_run and getattr(response, 'clarifying_questions', None):
+        ctx.state["task_planner_pending_questions"] = response.clarifying_questions.copy()
+        status_messages.append("\nEntering Task Planner Q&A Phase to collect your answers...")
+        return Event(output="\n".join(status_messages), route="ask_questions")
+
     status_messages.append("\nTask planning generation is complete. Workflow finished!")
     return Event(output="\n".join(status_messages))
+
+
+def ask_task_planner_questions_node(ctx, node_input):
+    pending_questions = ctx.state.get("task_planner_pending_questions", [])
+    
+    if not pending_questions:
+        return Event(output=None, route="finished")
+        
+    current_question = pending_questions[0]
+    ctx.state["task_planner_current_question"] = current_question
+    
+    return RequestInput(message=current_question)
+
+
+def save_task_planner_answer_node(ctx, node_input):
+    answer = getattr(node_input, 'text', str(node_input))
+    current_question = ctx.state.get("task_planner_current_question")
+    
+    qa_pairs = ctx.state.get("task_planner_qa_pairs", {})
+    qa_pairs[current_question] = answer
+    ctx.state["task_planner_qa_pairs"] = qa_pairs
+    
+    pending_questions = ctx.state.get("task_planner_pending_questions", [])
+    if pending_questions:
+        pending_questions.pop(0)
+    ctx.state["task_planner_pending_questions"] = pending_questions
+    
+    if pending_questions:
+        return Event(output=None, route="ask_more")
+    
+    return Event(output=qa_pairs, route="finished")
+
+
+def format_task_planner_update_prompt(ctx, node_input):
+    qa_pairs = node_input
+    
+    formatted_qa = "".join(
+        f"Q: {q}\nA: {a}\n\n" 
+        for q, a in qa_pairs.items()
+    )
+        
+    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
+Here are the user's answers to the clarifying questions:
+
+{formatted_qa}
+
+Instruction: Now update TaskPlan.md with these answers.
+You must return the full updated TaskPlan.md file in your `files_to_write` array.
+Ensure that the TaskPlan.md file is updated based on the new inputs from the user.
+"""
 
 
 
@@ -315,7 +374,11 @@ root_agent = Workflow(
         (ui_ux_designer_agent, process_ui_ux_response),
         (process_ui_ux_response, {"task_planning_phase": prepare_task_planner_prompt}),
         (prepare_task_planner_prompt, task_planner_agent),
-        (task_planner_agent, process_task_planner_response)
+        (task_planner_agent, process_task_planner_response),
+        (process_task_planner_response, {"ask_questions": ask_task_planner_questions_node}),
+        (ask_task_planner_questions_node, save_task_planner_answer_node),
+        (save_task_planner_answer_node, {"ask_more": ask_task_planner_questions_node, "finished": format_task_planner_update_prompt}),
+        (format_task_planner_update_prompt, task_planner_agent)
     ],
     description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan.",
 )
