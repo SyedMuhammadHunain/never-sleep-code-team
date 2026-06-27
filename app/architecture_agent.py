@@ -1,32 +1,15 @@
-import os
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 
 
-def _load_software_architecture_skill() -> str:
-    skill_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        ".agents",
-        "skills",
-        "software-architecture",
-        "SKILL.md",
-    )
-
-    if not os.path.exists(skill_path):
-        raise FileNotFoundError(
-            f"CRITICAL ERROR: Required skill file not found at {skill_path}. "
-            "The agent cannot function without this skill."
-        )
-
-    with open(skill_path, "r") as skill_file:
-        return skill_file.read()
+from app.app_utils.skill_loader import load_skill_file
 
 
 instruction = f"""You are the Architecture Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
-{_load_software_architecture_skill()}
+{load_skill_file("software-architecture")}
 </SKILL_DOCUMENT>
 
 Based on the user's task and the existing planning documents (e.g., PRD.md, TechSpec.md), design a robust architecture. You must provide the full content for the generated architecture file (e.g., Architecture.md) in `files_to_write`.

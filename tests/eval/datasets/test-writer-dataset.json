@@ -1,0 +1,11 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "test_writer_basic_app",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Write Playwright tests for a basic to-do list application, covering adding, completing, and deleting tasks."}]
+      }
+    }
+  ]
+}

@@ -1,35 +1,15 @@
-import os
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 
 
-def _load_conductor_new_track_skill() -> str:
-    skill_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        ".agents",
-        "skills",
-        "conductor-new-track",
-        "SKILL.md",
-    )
-
-    if not os.path.exists(skill_path):
-        raise FileNotFoundError(
-            f"CRITICAL ERROR: Required skill file not found at {skill_path}. "
-            "The agent cannot function without this skill."
-        )
-
-    with open(skill_path, "r") as skill_file:
-        content = skill_file.read()
-        # Escape curly braces for ADK template engine by replacing them with brackets
-        content = content.replace("{", "[").replace("}", "]")
-        return content
+from app.app_utils.skill_loader import load_skill_file
 
 
 instruction = f"""You are the Task Planner Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
-{_load_conductor_new_track_skill()}
+{load_skill_file("conductor-new-track")}
 </SKILL_DOCUMENT>
 
 Based on the generated architecture and UI/UX design documents, break down the project into a step-by-step implementation plan. Define the explicit tasks that need to be completed by the engineering team.

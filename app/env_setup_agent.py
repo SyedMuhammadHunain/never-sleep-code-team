@@ -1,35 +1,15 @@
-import os
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 
 
-def _load_mise_configurator_skill() -> str:
-    skill_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        ".agents",
-        "skills",
-        "mise-configurator",
-        "SKILL.md",
-    )
-
-    if not os.path.exists(skill_path):
-        raise FileNotFoundError(
-            f"CRITICAL ERROR: Required skill file not found at {skill_path}. "
-            "The agent cannot function without this skill."
-        )
-
-    with open(skill_path, "r") as skill_file:
-        content = skill_file.read()
-        # Escape curly braces for ADK template engine by replacing them with brackets
-        content = content.replace("{", "[").replace("}", "]")
-        return content
+from app.app_utils.skill_loader import load_skill_file
 
 
 instruction = f"""You are the Environment Setup Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
-{_load_mise_configurator_skill()}
+{load_skill_file("mise-configurator")}
 </SKILL_DOCUMENT>
 
 Based on the generated project planning documents and specifications, you must detect the project context and generate a valid `mise.toml` configuration for local development.
