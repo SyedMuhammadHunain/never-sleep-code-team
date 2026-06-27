@@ -1,0 +1,11 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "security_test_1",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Create a simple snake game in python. It should be a CLI game."}]
+      }
+    }
+  ]
+}
