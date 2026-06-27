@@ -5,13 +5,16 @@ from app.schemas import AgentResponse
 
 def _load_ui_ux_skill() -> str:
     skill_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 
-        ".agents", "skills", "ui-ux-designer", "SKILL.md"
+        os.path.dirname(os.path.dirname(__file__)),
+        ".agents",
+        "skills",
+        "ui-ux-designer",
+        "SKILL.md",
     )
-    
+
     if not os.path.exists(skill_path):
         return "You are the UI/UX Designer Agent. Focus on creating beautiful, accessible, and user-friendly interfaces."
-        
+
     with open(skill_path, "r") as skill_file:
         return skill_file.read()
 

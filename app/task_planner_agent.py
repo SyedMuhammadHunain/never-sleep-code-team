@@ -5,16 +5,19 @@ from app.schemas import AgentResponse
 
 def _load_conductor_new_track_skill() -> str:
     skill_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 
-        ".agents", "skills", "conductor-new-track", "SKILL.md"
+        os.path.dirname(os.path.dirname(__file__)),
+        ".agents",
+        "skills",
+        "conductor-new-track",
+        "SKILL.md",
     )
-    
+
     if not os.path.exists(skill_path):
         raise FileNotFoundError(
             f"CRITICAL ERROR: Required skill file not found at {skill_path}. "
             "The agent cannot function without this skill."
         )
-        
+
     with open(skill_path, "r") as skill_file:
         content = skill_file.read()
         # Escape curly braces for ADK template engine by replacing them with brackets

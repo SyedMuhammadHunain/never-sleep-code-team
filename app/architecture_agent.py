@@ -5,16 +5,19 @@ from app.schemas import AgentResponse
 
 def _load_software_architecture_skill() -> str:
     skill_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 
-        ".agents", "skills", "software-architecture", "SKILL.md"
+        os.path.dirname(os.path.dirname(__file__)),
+        ".agents",
+        "skills",
+        "software-architecture",
+        "SKILL.md",
     )
-    
+
     if not os.path.exists(skill_path):
         raise FileNotFoundError(
             f"CRITICAL ERROR: Required skill file not found at {skill_path}. "
             "The agent cannot function without this skill."
         )
-        
+
     with open(skill_path, "r") as skill_file:
         return skill_file.read()
 

@@ -22,7 +22,7 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
-import pytest
+import pytest  # type: ignore
 import requests
 from requests.exceptions import RequestException
 
