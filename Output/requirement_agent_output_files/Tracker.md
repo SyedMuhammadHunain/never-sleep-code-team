@@ -1,6 +1,6 @@
 # Progress Tracker
 
-- [ ] Initialize project structure.
-- [ ] Implement Auth.
-- [ ] Build product modules.
-- [ ] Integrate local storage.
+- [ ] Project initialized
+- [ ] Core components built
+- [ ] Persistence logic linked
+- [ ] Styling applied

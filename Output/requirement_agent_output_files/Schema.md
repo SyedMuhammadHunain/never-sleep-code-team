@@ -1,5 +1,8 @@
-# Database Schema
+# Data Structure (TypeScript Interface)
 
-- **Users:** id, email, password_hash.
-- **Products:** id, name, description, price, category, tags, priority.
-- **CartItems:** id, user_id, product_id, quantity.
+interface Task {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: number;
+}

@@ -8,10 +8,12 @@ from google.adk.events import Event
 from google.adk.events.request_input import RequestInput
 from app.architecture_agent import architecture_agent
 from app.ui_ux_designer_agent import ui_ux_designer_agent
+from app.task_planner_agent import task_planner_agent
 from app.schemas import FileToWrite, AgentResponse
 REQ_OUTPUT_DIR = "Output/requirement_agent_output_files"
 ARCH_OUTPUT_DIR = "Output/Architecture_output_files"
 UI_UX_OUTPUT_DIR = "Output/ui_ux_designer_output_files"
+TASK_PLAN_OUTPUT_DIR = "Output/task_planner_output_files"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -244,7 +246,53 @@ def process_ui_ux_response(ctx, node_input) -> Event:
     if getattr(response, 'message_to_user', None):
         status_messages.append(f"\nUI/UX Agent Message: {response.message_to_user}")
         
-    status_messages.append("\nUI/UX Design generation is complete. Workflow finished!")
+    status_messages.append("\nUI/UX Design generation is complete. Proceeding to Task Planning...")
+    return Event(output="\n".join(status_messages), route="task_planning_phase")
+
+
+def prepare_task_planner_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = ""
+    
+    for filename in FILE_SEQUENCE:
+        filepath = os.path.join(REQ_OUTPUT_DIR, filename)
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+                
+    arch_filepath = os.path.join(ARCH_OUTPUT_DIR, "Architecture.md")
+    if os.path.exists(arch_filepath):
+        with open(arch_filepath, "r") as f:
+            planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
+            
+    # Include output from UI UX agent
+    if os.path.exists(UI_UX_OUTPUT_DIR):
+        for filename in os.listdir(UI_UX_OUTPUT_DIR):
+            filepath = os.path.join(UI_UX_OUTPUT_DIR, filename)
+            if os.path.isfile(filepath):
+                with open(filepath, "r") as f:
+                    planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+    
+    prompt = f"Original User Task: {original_task}\n\nThe requirement, architecture, and UI/UX phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the TaskPlan.md via `files_to_write`."
+    return prompt
+
+
+def process_task_planner_response(ctx, node_input) -> Event:
+    if isinstance(node_input, dict):
+        response = AgentResponse(**node_input)
+    else:
+        response = node_input
+        
+    if not hasattr(response, 'files_to_write'):
+        return Event(output=f"System Error: Expected AgentResponse, got {type(response)}")
+        
+    file_messages = _save_planning_files(response.files_to_write, TASK_PLAN_OUTPUT_DIR) if getattr(response, 'files_to_write', None) else []
+    
+    status_messages = list(file_messages)
+    if getattr(response, 'message_to_user', None):
+        status_messages.append(f"\nTask Planner Agent Message: {response.message_to_user}")
+        
+    status_messages.append("\nTask planning generation is complete. Workflow finished!")
     return Event(output="\n".join(status_messages))
 
 
@@ -263,7 +311,10 @@ root_agent = Workflow(
         (architecture_agent, process_arch_response),
         (process_arch_response, {"ui_ux_phase": prepare_ui_ux_prompt}),
         (prepare_ui_ux_prompt, ui_ux_designer_agent),
-        (ui_ux_designer_agent, process_ui_ux_response)
+        (ui_ux_designer_agent, process_ui_ux_response),
+        (process_ui_ux_response, {"task_planning_phase": prepare_task_planner_prompt}),
+        (prepare_task_planner_prompt, task_planner_agent),
+        (task_planner_agent, process_task_planner_response)
     ],
-    description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, and creates UI/UX specs.",
+    description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan.",
 )

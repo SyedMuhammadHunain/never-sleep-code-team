@@ -1,9 +1,19 @@
-# Product Requirements Document: Shopping App
+# Product Requirements Document: Task Manager Web App
 
-- **Target Audience:** Users in Pakistan looking for a streamlined mobile shopping experience.
-- **Platform:** Mobile App.
-- **Core Features:** Product listing, cart management, categories, search, tags, priority-levels.
-- **Authentication:** Required.
-- **Storage:** Local storage/cache + Auth database.
-- **Monetization:** None specified.
-- **Currency:** PKR.
+## Overview
+A simple React-based web application for managing daily tasks.
+
+## Core Features
+- Add new tasks
+- View list of tasks
+- Mark tasks as complete
+- Delete tasks
+- Local storage persistence
+
+## Goals
+- Provide a clean, intuitive interface for personal task tracking.
+- Ensure zero setup for data persistence (browser-based).
+
+## Requirements
+- Must be built with React.
+- Must be responsive for mobile and desktop.

@@ -1,6 +1,6 @@
 # Design Guidelines
 
-- **Style:** Minimalist Corporate.
-- **Color Palette:** Black and White high-contrast scheme.
-- **Typography:** Large, bold fonts for readability and clear hierarchy.
-- **Density:** High-density content layout.
+- Style: Minimalist and clean.
+- Palette: Monochrome with a single accent color (Blue/Indigo).
+- Typography: Sans-serif system fonts.
+- Spacing: Comfortable density, mobile-first centered card layout.

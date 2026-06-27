@@ -1,6 +1,6 @@
-# Coding Standards
+# Project Rules
 
-- Language: TypeScript.
-- Framework: Angular.
-- UI: Minimalist, responsive design.
-- Focus: Maintainability and clear code structure.
+- Strictly follow React functional component patterns.
+- Use TypeScript for all code.
+- Keep logic in hooks where appropriate.
+- No external UI libraries beyond Tailwind.

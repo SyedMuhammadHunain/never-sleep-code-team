@@ -1,5 +1,5 @@
 metrics_to_run:
-  - custom_response_quality
+  - agent_turn_count
 
 custom_metrics:
   - name: custom_response_quality

@@ -1,7 +1,8 @@
-# Implementation Plan
+# Implementation Roadmap
 
-1. Setup Angular environment.
-2. Design and implement Auth system.
-3. Build product browsing and category filtering.
-4. Add cart and local storage integration.
-5. Apply minimalist corporate styling.
+1. Project setup (Vite + React + Tailwind)
+2. Define Task interface and helper storage functions
+3. Create TaskInput component
+4. Create TaskList component
+5. Implement core logic (Add/Delete/Toggle)
+6. Apply styling and polish
