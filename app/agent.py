@@ -8,12 +8,16 @@ from google.adk.events.request_input import RequestInput
 from app.architecture_agent import architecture_agent
 from app.ui_ux_designer_agent import ui_ux_designer_agent
 from app.task_planner_agent import task_planner_agent
+from app.env_setup_agent import env_setup_agent
+from app.coder_agent import coder_agent
 from app.schemas import FileToWrite, AgentResponse
 
 REQ_OUTPUT_DIR = "Output/requirement_agent_output_files"
 ARCH_OUTPUT_DIR = "Output/Architecture_output_files"
 UI_UX_OUTPUT_DIR = "Output/ui_ux_designer_output_files"
 TASK_PLAN_OUTPUT_DIR = "Output/task_planner_output_files"
+ENV_SETUP_OUTPUT_DIR = "Output/env_setup_output_files"
+CODER_OUTPUT_DIR = "Output/coder_output_files"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -353,7 +357,9 @@ def process_task_planner_response(ctx, node_input) -> Event:
         )
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
-    status_messages.append("\nTask planning generation is complete. Workflow finished!")
+    status_messages.append(
+        "\nTask planning generation is complete. Proceeding to Environment Setup..."
+    )
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
@@ -404,6 +410,225 @@ Ensure that the TaskPlan.md file is updated based on the new inputs from the use
 """
 
 
+def prepare_env_setup_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = ""
+
+    for filename in FILE_SEQUENCE:
+        filepath = os.path.join(REQ_OUTPUT_DIR, filename)
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+
+    arch_filepath = os.path.join(ARCH_OUTPUT_DIR, "Architecture.md")
+    if os.path.exists(arch_filepath):
+        with open(arch_filepath, "r") as f:
+            planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
+
+    if os.path.exists(UI_UX_OUTPUT_DIR):
+        for filename in os.listdir(UI_UX_OUTPUT_DIR):
+            filepath = os.path.join(UI_UX_OUTPUT_DIR, filename)
+            if os.path.isfile(filepath):
+                with open(filepath, "r") as f:
+                    planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+
+    if os.path.exists(TASK_PLAN_OUTPUT_DIR):
+        for filename in os.listdir(TASK_PLAN_OUTPUT_DIR):
+            filepath = os.path.join(TASK_PLAN_OUTPUT_DIR, filename)
+            if os.path.isfile(filepath):
+                with open(filepath, "r") as f:
+                    planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+
+    prompt = f"Original User Task: {original_task}\n\nThe planning phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the mise.toml configuration via `files_to_write`."
+    return prompt
+
+
+def process_env_setup_response(ctx, node_input) -> Event:
+    is_initial_run = ctx.state.get("is_env_setup_first_pass", True)
+
+    if is_initial_run:
+        ctx.state["is_env_setup_first_pass"] = False
+        ctx.state["env_setup_qa_pairs"] = {}
+
+    response = _parse_agent_response(node_input)
+
+    if not isinstance(response, AgentResponse):
+        return Event(
+            output=f"System Error: Expected AgentResponse, got {type(response)}"
+        )
+
+    file_messages = (
+        _save_planning_files(response.files_to_write, ENV_SETUP_OUTPUT_DIR)
+        if getattr(response, "files_to_write", None)
+        else []
+    )
+
+    status_messages = _build_status_messages(response, file_messages)
+
+    if is_initial_run and getattr(response, "clarifying_questions", None):
+        ctx.state["env_setup_pending_questions"] = response.clarifying_questions.copy()
+        status_messages.append(
+            "\nEntering Environment Setup Q&A Phase to collect your answers..."
+        )
+        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
+
+    status_messages.append(
+        "\nEnvironment setup generation is complete. Proceeding to Coding Phase..."
+    )
+    return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def ask_env_setup_questions_node(ctx, node_input):
+    pending_questions = ctx.state.get("env_setup_pending_questions", [])
+
+    if not pending_questions:
+        return Event(output=None, route="finished")  # type: ignore
+
+    current_question = pending_questions[0]
+    ctx.state["env_setup_current_question"] = current_question
+
+    return RequestInput(message=current_question)
+
+
+def save_env_setup_answer_node(ctx, node_input):
+    answer = getattr(node_input, "text", str(node_input))
+    current_question = ctx.state.get("env_setup_current_question")
+
+    qa_pairs = ctx.state.get("env_setup_qa_pairs", {})
+    qa_pairs[current_question] = answer
+    ctx.state["env_setup_qa_pairs"] = qa_pairs
+
+    pending_questions = ctx.state.get("env_setup_pending_questions", [])
+    if pending_questions:
+        pending_questions.pop(0)
+    ctx.state["env_setup_pending_questions"] = pending_questions
+
+    if pending_questions:
+        return Event(output=None, route="ask_more")  # type: ignore
+
+    return Event(output=qa_pairs, route="finished")  # type: ignore
+
+
+def format_env_setup_update_prompt(ctx, node_input):
+    qa_pairs = node_input
+
+    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
+
+    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
+Here are the user's answers to the clarifying questions:
+
+{formatted_qa}
+
+Instruction: Now update mise.toml with these answers.
+You must return the full updated mise.toml file in your `files_to_write` array.
+Ensure that the mise.toml file is updated based on the new inputs from the user.
+"""
+
+
+def prepare_coder_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = ""
+
+    for filename in FILE_SEQUENCE:
+        filepath = os.path.join(REQ_OUTPUT_DIR, filename)
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+
+    arch_filepath = os.path.join(ARCH_OUTPUT_DIR, "Architecture.md")
+    if os.path.exists(arch_filepath):
+        with open(arch_filepath, "r") as f:
+            planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
+
+    for d in [UI_UX_OUTPUT_DIR, TASK_PLAN_OUTPUT_DIR, ENV_SETUP_OUTPUT_DIR]:
+        if os.path.exists(d):
+            for filename in os.listdir(d):
+                filepath = os.path.join(d, filename)
+                if os.path.isfile(filepath):
+                    with open(filepath, "r") as f:
+                        planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+
+    prompt = f"Original User Task: {original_task}\n\nThe planning and setup phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease begin implementing the tasks following the Coder Agent instructions."
+    return prompt
+
+
+def process_coder_response(ctx, node_input) -> Event:
+    is_initial_run = ctx.state.get("is_coder_first_pass", True)
+
+    if is_initial_run:
+        ctx.state["is_coder_first_pass"] = False
+        ctx.state["coder_qa_pairs"] = {}
+
+    response = _parse_agent_response(node_input)
+
+    if not isinstance(response, AgentResponse):
+        return Event(
+            output=f"System Error: Expected AgentResponse, got {type(response)}"
+        )
+
+    file_messages = (
+        _save_planning_files(response.files_to_write, CODER_OUTPUT_DIR)
+        if getattr(response, "files_to_write", None)
+        else []
+    )
+
+    status_messages = _build_status_messages(response, file_messages)
+
+    if is_initial_run and getattr(response, "clarifying_questions", None):
+        ctx.state["coder_pending_questions"] = response.clarifying_questions.copy()
+        status_messages.append("\nEntering Coding Q&A Phase to collect your answers...")
+        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
+
+    status_messages.append("\nCoding Phase is complete. Workflow finished!")
+    return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def ask_coder_questions_node(ctx, node_input):
+    pending_questions = ctx.state.get("coder_pending_questions", [])
+
+    if not pending_questions:
+        return Event(output=None, route="finished")  # type: ignore
+
+    current_question = pending_questions[0]
+    ctx.state["coder_current_question"] = current_question
+
+    return RequestInput(message=current_question)
+
+
+def save_coder_answer_node(ctx, node_input):
+    answer = getattr(node_input, "text", str(node_input))
+    current_question = ctx.state.get("coder_current_question")
+
+    qa_pairs = ctx.state.get("coder_qa_pairs", {})
+    qa_pairs[current_question] = answer
+    ctx.state["coder_qa_pairs"] = qa_pairs
+
+    pending_questions = ctx.state.get("coder_pending_questions", [])
+    if pending_questions:
+        pending_questions.pop(0)
+    ctx.state["coder_pending_questions"] = pending_questions
+
+    if pending_questions:
+        return Event(output=None, route="ask_more")  # type: ignore
+
+    return Event(output=qa_pairs, route="finished")  # type: ignore
+
+
+def format_coder_update_prompt(ctx, node_input):
+    qa_pairs = node_input
+
+    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
+
+    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
+Here are the user's answers to the clarifying questions:
+
+{formatted_qa}
+
+Instruction: Now update the implementation files with these answers.
+You must return the full updated files in your `files_to_write` array.
+"""
+
+
 def end_workflow_node(ctx, node_input):
     return node_input
 
@@ -436,7 +661,7 @@ root_agent = Workflow(
             process_task_planner_response,
             {
                 "ask_questions": ask_task_planner_questions_node,
-                "done": end_workflow_node,
+                "done": prepare_env_setup_prompt,
             },
         ),
         (ask_task_planner_questions_node, save_task_planner_answer_node),
@@ -448,6 +673,42 @@ root_agent = Workflow(
             },
         ),
         (format_task_planner_update_prompt, task_planner_agent),
+        (prepare_env_setup_prompt, env_setup_agent),
+        (env_setup_agent, process_env_setup_response),
+        (
+            process_env_setup_response,
+            {
+                "ask_questions": ask_env_setup_questions_node,
+                "done": prepare_coder_prompt,
+            },
+        ),
+        (ask_env_setup_questions_node, save_env_setup_answer_node),
+        (
+            save_env_setup_answer_node,
+            {
+                "ask_more": ask_env_setup_questions_node,
+                "finished": format_env_setup_update_prompt,
+            },
+        ),
+        (format_env_setup_update_prompt, env_setup_agent),
+        (prepare_coder_prompt, coder_agent),
+        (coder_agent, process_coder_response),
+        (
+            process_coder_response,
+            {
+                "ask_questions": ask_coder_questions_node,
+                "done": end_workflow_node,
+            },
+        ),
+        (ask_coder_questions_node, save_coder_answer_node),
+        (
+            save_coder_answer_node,
+            {
+                "ask_more": ask_coder_questions_node,
+                "finished": format_coder_update_prompt,
+            },
+        ),
+        (format_coder_update_prompt, coder_agent),
     ],
     description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan.",
 )

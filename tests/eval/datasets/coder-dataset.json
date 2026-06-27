@@ -1,0 +1,11 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "implement_python_node_project",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Create a full-stack application with a Python FastAPI backend and a Node.js React frontend. Implement the core functionality."}]
+      }
+    }
+  ]
+}
