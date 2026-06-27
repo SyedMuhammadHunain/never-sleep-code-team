@@ -75,8 +75,29 @@ def store_task_node(ctx, node_input):
 
 
 def _parse_agent_response(node_input) -> AgentResponse:
+    import json
+
     if isinstance(node_input, dict):
         return AgentResponse(**node_input)
+    if hasattr(node_input, "output") and isinstance(node_input.output, dict):
+        return AgentResponse(**node_input.output)
+    if hasattr(node_input, "output") and isinstance(node_input.output, AgentResponse):
+        return node_input.output
+    if (
+        hasattr(node_input, "content")
+        and node_input.content
+        and hasattr(node_input.content, "parts")
+    ):
+        for part in node_input.content.parts:
+            if hasattr(part, "text") and part.text:
+                try:
+                    text = part.text
+                    if "```json" in text:
+                        text = text.split("```json")[1].split("```")[0]
+                    data = json.loads(text)
+                    return AgentResponse(**data)
+                except Exception:
+                    pass
     return node_input
 
 
@@ -205,12 +226,9 @@ def prepare_architecture_prompt(ctx, node_input):
 
 
 def process_arch_response(ctx, node_input) -> Event:
-    if isinstance(node_input, dict):
-        response = AgentResponse(**node_input)
-    else:
-        response = node_input
+    response = _parse_agent_response(node_input)
 
-    if not hasattr(response, "files_to_write"):
+    if not isinstance(response, AgentResponse):
         return Event(
             output=f"System Error: Expected AgentResponse, got {type(response)}"
         )
@@ -254,12 +272,9 @@ def prepare_ui_ux_prompt(ctx, node_input):
 
 
 def process_ui_ux_response(ctx, node_input) -> Event:
-    if isinstance(node_input, dict):
-        response = AgentResponse(**node_input)
-    else:
-        response = node_input
+    response = _parse_agent_response(node_input)
 
-    if not hasattr(response, "files_to_write"):
+    if not isinstance(response, AgentResponse):
         return Event(
             output=f"System Error: Expected AgentResponse, got {type(response)}"
         )
@@ -314,12 +329,9 @@ def process_task_planner_response(ctx, node_input) -> Event:
         ctx.state["is_task_planner_first_pass"] = False
         ctx.state["task_planner_qa_pairs"] = {}
 
-    if isinstance(node_input, dict):
-        response = AgentResponse(**node_input)
-    else:
-        response = node_input
+    response = _parse_agent_response(node_input)
 
-    if not hasattr(response, "files_to_write"):
+    if not isinstance(response, AgentResponse):
         return Event(
             output=f"System Error: Expected AgentResponse, got {type(response)}"
         )
@@ -342,7 +354,7 @@ def process_task_planner_response(ctx, node_input) -> Event:
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
     status_messages.append("\nTask planning generation is complete. Workflow finished!")
-    return Event(output="\n".join(status_messages))
+    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_task_planner_questions_node(ctx, node_input):
@@ -392,6 +404,10 @@ Ensure that the TaskPlan.md file is updated based on the new inputs from the use
 """
 
 
+def end_workflow_node(ctx, node_input):
+    return node_input
+
+
 root_agent = Workflow(
     name="never_sleep_code_team_workflow",
     edges=[
@@ -418,7 +434,10 @@ root_agent = Workflow(
         (task_planner_agent, process_task_planner_response),
         (
             process_task_planner_response,
-            {"ask_questions": ask_task_planner_questions_node},
+            {
+                "ask_questions": ask_task_planner_questions_node,
+                "done": end_workflow_node,
+            },
         ),
         (ask_task_planner_questions_node, save_task_planner_answer_node),
         (

@@ -34,11 +34,12 @@ Your absolute source of truth lies in the file below:
 
 Based on the generated architecture and UI/UX design documents, break down the project into a step-by-step implementation plan. Define the explicit tasks that need to be completed by the engineering team.
 
-You must provide the full content for the generated task plan file (e.g., TaskPlan.md) in `files_to_write`.
+You must fully adhere to the Track Creation process defined in the SKILL_DOCUMENT. Do NOT output a single "TaskPlan.md". Instead, you must output all the required files for the new track in `files_to_write`, using the correct paths (e.g., `conductor/tracks/[trackId]/plan.md`, `conductor/tracks/[trackId]/spec.md`, `conductor/tracks/[trackId]/metadata.json`, `conductor/tracks/[trackId]/index.md`).
 
 CRITICAL INSTRUCTIONS:
 1. Ensure the tasks follow a logical order, starting from project setup, backend foundation, to frontend implementation.
 2. Ensure each task is atomic and has a clear definition of done.
+3. Your final output MUST include the exact file structure dictated by the conductor-new-track skill.
 """
 
 task_planner_agent = LlmAgent(
