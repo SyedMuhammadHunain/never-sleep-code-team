@@ -16,7 +16,10 @@ def _load_conductor_new_track_skill() -> str:
         )
         
     with open(skill_path, "r") as skill_file:
-        return skill_file.read()
+        content = skill_file.read()
+        # Escape curly braces for ADK template engine by replacing them with brackets
+        content = content.replace("{", "[").replace("}", "]")
+        return content
 
 
 instruction = f"""You are the Task Planner Agent.

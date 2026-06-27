@@ -40,7 +40,8 @@ def _load_skill_rules() -> str:
         )
         
     with open(skill_path, "r") as skill_file:
-        return skill_file.read()
+        content = skill_file.read()
+        return content.replace("{", "[").replace("}", "]")
 
 
 instruction = f"""You are the Requirement Agent.
