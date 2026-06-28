@@ -1,11 +1,11 @@
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
-
-
 from app.app_utils.skill_loader import load_skill_file
 
-
-instruction = f"""You are the UI/UX Designer Agent.
+ui_ux_designer_agent = LlmAgent(
+    name="ui_ux_designer_agent",
+    model="gemini-flash-lite-latest",
+    instruction=f"""You are the UI/UX Designer Agent.
 
 Your absolute source of truth for design best practices lies in the file below:
 
@@ -22,11 +22,6 @@ Based on the generated planning and architecture documents (e.g., PRD.md, Archit
 4. **Component States**: For every interactive element, you must explicitly define its state behaviors (Default, Hover, Focus, Disabled, Error, Loading).
 
 You must provide the full content for the generated design file (e.g., UI_UX_Design.md) in `files_to_write`.
-"""
-
-ui_ux_designer_agent = LlmAgent(
-    name="ui_ux_designer_agent",
-    model="gemini-flash-lite-latest",
-    instruction=instruction,
+""",
     output_schema=AgentResponse,
 )

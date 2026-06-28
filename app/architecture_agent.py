@@ -1,11 +1,11 @@
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
-
-
 from app.app_utils.skill_loader import load_skill_file
 
-
-instruction = f"""You are the Architecture Agent.
+architecture_agent = LlmAgent(
+    name="architecture_agent",
+    model="gemini-flash-lite-latest",
+    instruction=f"""You are the Architecture Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
@@ -24,11 +24,6 @@ You MUST include the following compliance checklist at the very bottom of the ge
 - [ ] Did I use an external library (e.g., Zustand) instead of custom React Context?
 - [ ] Are generic folder names (`utils`, `helpers`) completely banned?
 - [ ] Are function/file size constraints explicitly mentioned?
-"""
-
-architecture_agent = LlmAgent(
-    name="architecture_agent",
-    model="gemini-flash-lite-latest",
-    instruction=instruction,
+""",
     output_schema=AgentResponse,
 )

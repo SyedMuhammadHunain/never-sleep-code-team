@@ -1,5 +1,6 @@
 from typing import List
-from pydantic import BaseModel
+
+from pydantic import BaseModel, Field
 
 
 class FileToWrite(BaseModel):
@@ -8,6 +9,6 @@ class FileToWrite(BaseModel):
 
 
 class AgentResponse(BaseModel):
-    files_to_write: List[FileToWrite]
-    clarifying_questions: List[str]
-    message_to_user: str
+    files_to_write: List[FileToWrite] = Field(default_factory=list)
+    clarifying_questions: List[str] = Field(default_factory=list)
+    message_to_user: str = ""

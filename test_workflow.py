@@ -10,7 +10,7 @@ from google.adk.sessions import InMemorySessionService
 async def main():
     print("Running workflow test...")
     runner = Runner(
-        agent=root_agent,  # type: ignore
+        agent=root_agent,
         app_name="test_app",
         session_service=InMemorySessionService(),
         auto_create_session=True,

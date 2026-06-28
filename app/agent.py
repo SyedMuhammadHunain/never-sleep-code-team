@@ -1,3 +1,4 @@
+import json
 import os
 from typing import List
 
@@ -51,7 +52,10 @@ FILE_SEQUENCE = [
 ]
 
 
-instruction = f"""You are the Requirement Agent.
+requirement_agent = LlmAgent(
+    name="requirement_agent",
+    model="gemini-flash-lite-latest",
+    instruction=f"""You are the Requirement Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
@@ -60,12 +64,7 @@ Your absolute source of truth lies in the file below:
 
 Based on the user's task, generate ALL 8 required planning files exactly matching these names. You must provide the full content for each file in `files_to_write`:
 {", ".join(FILE_SEQUENCE)}
-"""
-
-requirement_agent = LlmAgent(
-    name="requirement_agent",
-    model="gemini-flash-lite-latest",
-    instruction=instruction,
+""",
     output_schema=AgentResponse,
 )
 
@@ -79,8 +78,6 @@ def store_task_node(ctx, node_input):
 
 
 def _parse_agent_response(node_input) -> AgentResponse:
-    import json
-
     if isinstance(node_input, dict):
         return AgentResponse(**node_input)
     if hasattr(node_input, "output") and isinstance(node_input.output, dict):
@@ -228,7 +225,7 @@ Ensure that the Design.md file is updated on the disk based on the new inputs fr
 """
 
 
-def _read_planning_docs(dirs_to_read: List[str]) -> str:
+def _read_planning_docs(extra_output_dirs: List[str]) -> str:
     planning_docs = ""
     for filename in FILE_SEQUENCE:
         filepath = os.path.join(REQ_OUTPUT_DIR, filename)
@@ -236,15 +233,15 @@ def _read_planning_docs(dirs_to_read: List[str]) -> str:
             with open(filepath, "r") as f:
                 planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
 
-    for d in dirs_to_read:
-        if d == ARCH_OUTPUT_DIR:
+    for directory in extra_output_dirs:
+        if directory == ARCH_OUTPUT_DIR:
             arch_filepath = os.path.join(ARCH_OUTPUT_DIR, "Architecture.md")
             if os.path.exists(arch_filepath):
                 with open(arch_filepath, "r") as f:
                     planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
-        elif os.path.exists(d):
-            for filename in os.listdir(d):
-                filepath = os.path.join(d, filename)
+        elif os.path.exists(directory):
+            for filename in os.listdir(directory):
+                filepath = os.path.join(directory, filename)
                 if os.path.isfile(filepath):
                     with open(filepath, "r") as f:
                         planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
@@ -880,7 +877,7 @@ def end_workflow_node(ctx, node_input):
     return node_input
 
 
-root_agent = Workflow(
+_root_agent_workflow = Workflow(
     name="never_sleep_code_team_workflow",
     edges=[
         (START, store_task_node),
@@ -1121,3 +1118,5 @@ root_agent = Workflow(
     ],
     description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan, sets up the environment, codes, writes tests, debugs, and performs security and performance analysis, and finally code review.",
 )
+
+root_agent = research_agent

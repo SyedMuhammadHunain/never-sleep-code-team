@@ -1,0 +1,11 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "research_reach_methodology",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Conduct deep research on advanced multi-agent workflow orchestration using the agent-reach methodology and output the research notes."}]
+      }
+    }
+  ]
+}

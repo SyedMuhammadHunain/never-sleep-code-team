@@ -1,11 +1,11 @@
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
-
-
 from app.app_utils.skill_loader import load_skill_file
 
-
-instruction = f"""You are the Task Planner Agent.
+task_planner_agent = LlmAgent(
+    name="task_planner_agent",
+    model="gemini-flash-lite-latest",
+    instruction=f"""You are the Task Planner Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
@@ -20,11 +20,6 @@ CRITICAL INSTRUCTIONS:
 1. Ensure the tasks follow a logical order, starting from project setup, backend foundation, to frontend implementation.
 2. Ensure each task is atomic and has a clear definition of done.
 3. Your final output MUST include the exact file structure dictated by the conductor-new-track skill.
-"""
-
-task_planner_agent = LlmAgent(
-    name="task_planner_agent",
-    model="gemini-flash-lite-latest",
-    instruction=instruction,
+""",
     output_schema=AgentResponse,
 )

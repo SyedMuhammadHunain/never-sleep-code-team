@@ -2,8 +2,10 @@ from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
-
-instruction = f"""You are the Security Agent.
+security_agent = LlmAgent(
+    name="security_agent",
+    model="gemini-flash-lite-latest",
+    instruction=f"""You are the Security Agent.
 Your absolute source of truth lies in the file below:
 
 <SKILL_DOCUMENT>
@@ -22,11 +24,6 @@ Your output MUST include files covering the following 8 steps from your instruct
 8. Document residual risks
 
 Generate these findings in comprehensive markdown files (e.g., `ThreatModel.md` or individual files per step) via the `files_to_write` array in your AgentResponse.
-"""
-
-security_agent = LlmAgent(
-    name="security_agent",
-    model="gemini-flash-lite-latest",
-    instruction=instruction,
+""",
     output_schema=AgentResponse,
 )
