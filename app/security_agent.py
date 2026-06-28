@@ -1,4 +1,4 @@
-from google.adk.agents import Agent
+from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
@@ -24,7 +24,7 @@ Your output MUST include files covering the following 8 steps from your instruct
 Generate these findings in comprehensive markdown files (e.g., `ThreatModel.md` or individual files per step) via the `files_to_write` array in your AgentResponse.
 """
 
-security_agent = Agent(
+security_agent = LlmAgent(
     name="security_agent",
     model="gemini-flash-lite-latest",
     instruction=instruction,

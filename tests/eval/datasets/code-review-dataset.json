@@ -1,0 +1,15 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "test_code_review",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Please review this code:\n\n```python\ndef add(a, b):\n    return a + b\n```"
+          }
+        ]
+      }
+    }
+  ]
+}

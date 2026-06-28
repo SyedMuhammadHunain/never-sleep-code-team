@@ -16,6 +16,11 @@ from app.test_writer_agent import test_writer_agent
 from app.debugger_agent import debugger_agent
 from app.security_agent import security_agent
 from app.performance_agent import performance_agent
+from app.code_review_agent import code_review_agent
+from app.cicd_agent import cicd_agent
+from app.notifier_agent import notifier_agent
+from app.monitoring_agent import monitoring_agent
+from app.research_agent import research_agent
 from app.schemas import FileToWrite, AgentResponse
 
 REQ_OUTPUT_DIR = "Output/requirement_agent_output_files"
@@ -28,6 +33,11 @@ TEST_WRITER_OUTPUT_DIR = "Output/test_writer_output_files"
 DEBUGGER_OUTPUT_DIR = "Output/debugger_output_files"
 SECURITY_OUTPUT_DIR = "Output/security_output_files"
 PERFORMANCE_OUTPUT_DIR = "Output/performance_output_files"
+CODE_REVIEW_OUTPUT_DIR = "Output/code_review_output_files"
+CICD_OUTPUT_DIR = "Output/cicd_output_files"
+NOTIFIER_OUTPUT_DIR = "Output/notifier_output_files"
+MONITORING_OUTPUT_DIR = "Output/monitoring_output_files"
+RESEARCH_OUTPUT_DIR = "Output/research_output_files"
 
 FILE_SEQUENCE = [
     "PRD.md",
@@ -312,12 +322,19 @@ def prepare_task_planner_prompt(ctx, node_input):
     return prompt
 
 
-def process_task_planner_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_task_planner_first_pass", True)
+def _process_response_helper(
+    ctx,
+    node_input,
+    prefix: str,
+    output_dir: str,
+    qa_phase_message: str,
+    done_message: str,
+) -> Event:
+    is_initial_run = ctx.state.get(f"is_{prefix}first_pass", True)
 
     if is_initial_run:
-        ctx.state["is_task_planner_first_pass"] = False
-        ctx.state["task_planner_qa_pairs"] = {}
+        ctx.state[f"is_{prefix}first_pass"] = False
+        ctx.state[f"{prefix}qa_pairs"] = {}
 
     response = _parse_agent_response(node_input)
 
@@ -327,7 +344,7 @@ def process_task_planner_response(ctx, node_input) -> Event:
         )
 
     file_messages = (
-        _save_planning_files(response.files_to_write, TASK_PLAN_OUTPUT_DIR)
+        _save_planning_files(response.files_to_write, output_dir)
         if getattr(response, "files_to_write", None)
         else []
     )
@@ -335,18 +352,23 @@ def process_task_planner_response(ctx, node_input) -> Event:
     status_messages = _build_status_messages(response, file_messages)
 
     if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["task_planner_pending_questions"] = (
-            response.clarifying_questions.copy()
-        )
-        status_messages.append(
-            "\nEntering Task Planner Q&A Phase to collect your answers..."
-        )
+        ctx.state[f"{prefix}pending_questions"] = response.clarifying_questions.copy()
+        status_messages.append(f"\n{qa_phase_message}")
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
-    status_messages.append(
-        "\nTask planning generation is complete. Proceeding to Environment Setup..."
-    )
+    status_messages.append(f"\n{done_message}")
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def process_task_planner_response(ctx, node_input) -> Event:
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "task_planner_",
+        TASK_PLAN_OUTPUT_DIR,
+        "Entering Task Planner Q&A Phase to collect your answers...",
+        "Task planning generation is complete. Proceeding to Environment Setup...",
+    )
 
 
 def ask_task_planner_questions_node(ctx, node_input):
@@ -357,20 +379,24 @@ def save_task_planner_answer_node(ctx, node_input):
     return _save_answer_helper(ctx, node_input, "task_planner_")
 
 
-def format_task_planner_update_prompt(ctx, node_input):
+def _format_update_prompt_helper(node_input, instruction_text: str) -> str:
     qa_pairs = node_input
-
     formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
-
     return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
 Here are the user's answers to the clarifying questions:
 
 {formatted_qa}
 
-Instruction: Now update TaskPlan.md with these answers.
+{instruction_text}"""
+
+
+def format_task_planner_update_prompt(ctx, node_input):
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update TaskPlan.md with these answers.
 You must return the full updated TaskPlan.md file in your `files_to_write` array.
-Ensure that the TaskPlan.md file is updated based on the new inputs from the user.
-"""
+Ensure that the TaskPlan.md file is updated based on the new inputs from the user.""",
+    )
 
 
 def prepare_env_setup_prompt(ctx, node_input):
@@ -383,38 +409,14 @@ def prepare_env_setup_prompt(ctx, node_input):
 
 
 def process_env_setup_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_env_setup_first_pass", True)
-
-    if is_initial_run:
-        ctx.state["is_env_setup_first_pass"] = False
-        ctx.state["env_setup_qa_pairs"] = {}
-
-    response = _parse_agent_response(node_input)
-
-    if not isinstance(response, AgentResponse):
-        return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
-        )
-
-    file_messages = (
-        _save_planning_files(response.files_to_write, ENV_SETUP_OUTPUT_DIR)
-        if getattr(response, "files_to_write", None)
-        else []
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "env_setup_",
+        ENV_SETUP_OUTPUT_DIR,
+        "Entering Environment Setup Q&A Phase to collect your answers...",
+        "Environment setup generation is complete. Proceeding to Coding Phase...",
     )
-
-    status_messages = _build_status_messages(response, file_messages)
-
-    if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["env_setup_pending_questions"] = response.clarifying_questions.copy()
-        status_messages.append(
-            "\nEntering Environment Setup Q&A Phase to collect your answers..."
-        )
-        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
-
-    status_messages.append(
-        "\nEnvironment setup generation is complete. Proceeding to Coding Phase..."
-    )
-    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_env_setup_questions_node(ctx, node_input):
@@ -426,19 +428,12 @@ def save_env_setup_answer_node(ctx, node_input):
 
 
 def format_env_setup_update_prompt(ctx, node_input):
-    qa_pairs = node_input
-
-    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
-
-    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
-Here are the user's answers to the clarifying questions:
-
-{formatted_qa}
-
-Instruction: Now update mise.toml with these answers.
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update mise.toml with these answers.
 You must return the full updated mise.toml file in your `files_to_write` array.
-Ensure that the mise.toml file is updated based on the new inputs from the user.
-"""
+Ensure that the mise.toml file is updated based on the new inputs from the user.""",
+    )
 
 
 def prepare_coder_prompt(ctx, node_input):
@@ -451,34 +446,14 @@ def prepare_coder_prompt(ctx, node_input):
 
 
 def process_coder_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_coder_first_pass", True)
-
-    if is_initial_run:
-        ctx.state["is_coder_first_pass"] = False
-        ctx.state["coder_qa_pairs"] = {}
-
-    response = _parse_agent_response(node_input)
-
-    if not isinstance(response, AgentResponse):
-        return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
-        )
-
-    file_messages = (
-        _save_planning_files(response.files_to_write, CODER_OUTPUT_DIR)
-        if getattr(response, "files_to_write", None)
-        else []
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "coder_",
+        CODER_OUTPUT_DIR,
+        "Entering Coding Q&A Phase to collect your answers...",
+        "Coding Phase is complete. Proceeding to Test Writing...",
     )
-
-    status_messages = _build_status_messages(response, file_messages)
-
-    if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["coder_pending_questions"] = response.clarifying_questions.copy()
-        status_messages.append("\nEntering Coding Q&A Phase to collect your answers...")
-        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
-
-    status_messages.append("\nCoding Phase is complete. Proceeding to Test Writing...")
-    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_coder_questions_node(ctx, node_input):
@@ -490,18 +465,11 @@ def save_coder_answer_node(ctx, node_input):
 
 
 def format_coder_update_prompt(ctx, node_input):
-    qa_pairs = node_input
-
-    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
-
-    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
-Here are the user's answers to the clarifying questions:
-
-{formatted_qa}
-
-Instruction: Now update the implementation files with these answers.
-You must return the full updated files in your `files_to_write` array.
-"""
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update the implementation files with these answers.
+You must return the full updated files in your `files_to_write` array.""",
+    )
 
 
 def prepare_test_writer_prompt(ctx, node_input):
@@ -520,40 +488,14 @@ def prepare_test_writer_prompt(ctx, node_input):
 
 
 def process_test_writer_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_test_writer_first_pass", True)
-
-    if is_initial_run:
-        ctx.state["is_test_writer_first_pass"] = False
-        ctx.state["test_writer_qa_pairs"] = {}
-
-    response = _parse_agent_response(node_input)
-
-    if not isinstance(response, AgentResponse):
-        return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
-        )
-
-    file_messages = (
-        _save_planning_files(response.files_to_write, TEST_WRITER_OUTPUT_DIR)
-        if getattr(response, "files_to_write", None)
-        else []
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "test_writer_",
+        TEST_WRITER_OUTPUT_DIR,
+        "Entering Test Writing Q&A Phase to collect your answers...",
+        "Test Writing Phase is complete. Proceeding to Debugging...",
     )
-
-    status_messages = _build_status_messages(response, file_messages)
-
-    if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["test_writer_pending_questions"] = (
-            response.clarifying_questions.copy()
-        )
-        status_messages.append(
-            "\nEntering Test Writing Q&A Phase to collect your answers..."
-        )
-        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
-
-    status_messages.append(
-        "\nTest Writing Phase is complete. Proceeding to Debugging..."
-    )
-    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_test_writer_questions_node(ctx, node_input):
@@ -565,18 +507,11 @@ def save_test_writer_answer_node(ctx, node_input):
 
 
 def format_test_writer_update_prompt(ctx, node_input):
-    qa_pairs = node_input
-
-    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
-
-    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
-Here are the user's answers to the clarifying questions:
-
-{formatted_qa}
-
-Instruction: Now update the test files with these answers.
-You must return the full updated files in your `files_to_write` array.
-"""
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update the test files with these answers.
+You must return the full updated files in your `files_to_write` array.""",
+    )
 
 
 def prepare_debugger_prompt(ctx, node_input):
@@ -596,38 +531,14 @@ def prepare_debugger_prompt(ctx, node_input):
 
 
 def process_debugger_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_debugger_first_pass", True)
-
-    if is_initial_run:
-        ctx.state["is_debugger_first_pass"] = False
-        ctx.state["debugger_qa_pairs"] = {}
-
-    response = _parse_agent_response(node_input)
-
-    if not isinstance(response, AgentResponse):
-        return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
-        )
-
-    file_messages = (
-        _save_planning_files(response.files_to_write, DEBUGGER_OUTPUT_DIR)
-        if getattr(response, "files_to_write", None)
-        else []
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "debugger_",
+        DEBUGGER_OUTPUT_DIR,
+        "Entering Debugging Q&A Phase to collect your answers...",
+        "Debugging Phase is complete. Proceeding to Security Analysis...",
     )
-
-    status_messages = _build_status_messages(response, file_messages)
-
-    if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["debugger_pending_questions"] = response.clarifying_questions.copy()
-        status_messages.append(
-            "\nEntering Debugging Q&A Phase to collect your answers..."
-        )
-        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
-
-    status_messages.append(
-        "\nDebugging Phase is complete. Proceeding to Security Analysis..."
-    )
-    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_debugger_questions_node(ctx, node_input):
@@ -639,18 +550,11 @@ def save_debugger_answer_node(ctx, node_input):
 
 
 def format_debugger_update_prompt(ctx, node_input):
-    qa_pairs = node_input
-
-    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
-
-    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
-Here are the user's answers to the clarifying questions:
-
-{formatted_qa}
-
-Instruction: Now update the code with these answers.
-You must return the full updated files in your `files_to_write` array.
-"""
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update the code with these answers.
+You must return the full updated files in your `files_to_write` array.""",
+    )
 
 
 def prepare_security_prompt(ctx, node_input):
@@ -671,38 +575,14 @@ def prepare_security_prompt(ctx, node_input):
 
 
 def process_security_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_security_first_pass", True)
-
-    if is_initial_run:
-        ctx.state["is_security_first_pass"] = False
-        ctx.state["security_qa_pairs"] = {}
-
-    response = _parse_agent_response(node_input)
-
-    if not isinstance(response, AgentResponse):
-        return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
-        )
-
-    file_messages = (
-        _save_planning_files(response.files_to_write, SECURITY_OUTPUT_DIR)
-        if getattr(response, "files_to_write", None)
-        else []
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "security_",
+        SECURITY_OUTPUT_DIR,
+        "Entering Security Q&A Phase to collect your answers...",
+        "Security Phase is complete. Proceeding to Performance Analysis...",
     )
-
-    status_messages = _build_status_messages(response, file_messages)
-
-    if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["security_pending_questions"] = response.clarifying_questions.copy()
-        status_messages.append(
-            "\nEntering Security Q&A Phase to collect your answers..."
-        )
-        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
-
-    status_messages.append(
-        "\nSecurity Phase is complete. Proceeding to Performance Analysis..."
-    )
-    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_security_questions_node(ctx, node_input):
@@ -714,18 +594,11 @@ def save_security_answer_node(ctx, node_input):
 
 
 def format_security_update_prompt(ctx, node_input):
-    qa_pairs = node_input
-
-    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
-
-    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
-Here are the user's answers to the clarifying questions:
-
-{formatted_qa}
-
-Instruction: Now update the security documents with these answers.
-You must return the full updated files in your `files_to_write` array.
-"""
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update the security documents with these answers.
+You must return the full updated files in your `files_to_write` array.""",
+    )
 
 
 def prepare_performance_prompt(ctx, node_input):
@@ -747,38 +620,14 @@ def prepare_performance_prompt(ctx, node_input):
 
 
 def process_performance_response(ctx, node_input) -> Event:
-    is_initial_run = ctx.state.get("is_performance_first_pass", True)
-
-    if is_initial_run:
-        ctx.state["is_performance_first_pass"] = False
-        ctx.state["performance_qa_pairs"] = {}
-
-    response = _parse_agent_response(node_input)
-
-    if not isinstance(response, AgentResponse):
-        return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
-        )
-
-    file_messages = (
-        _save_planning_files(response.files_to_write, PERFORMANCE_OUTPUT_DIR)
-        if getattr(response, "files_to_write", None)
-        else []
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "performance_",
+        PERFORMANCE_OUTPUT_DIR,
+        "Entering Performance Q&A Phase to collect your answers...",
+        "Performance Phase is complete. Proceeding to Code Review...",
     )
-
-    status_messages = _build_status_messages(response, file_messages)
-
-    if is_initial_run and getattr(response, "clarifying_questions", None):
-        ctx.state["performance_pending_questions"] = (
-            response.clarifying_questions.copy()
-        )
-        status_messages.append(
-            "\nEntering Performance Q&A Phase to collect your answers..."
-        )
-        return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
-
-    status_messages.append("\nPerformance Phase is complete. Workflow finished!")
-    return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
 def ask_performance_questions_node(ctx, node_input):
@@ -790,18 +639,241 @@ def save_performance_answer_node(ctx, node_input):
 
 
 def format_performance_update_prompt(ctx, node_input):
-    qa_pairs = node_input
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update the performance documents with these answers.
+You must return the full updated files in your `files_to_write` array.""",
+    )
 
-    formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
 
-    return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
-Here are the user's answers to the clarifying questions:
+def prepare_code_review_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+            DEBUGGER_OUTPUT_DIR,
+            SECURITY_OUTPUT_DIR,
+            PERFORMANCE_OUTPUT_DIR,
+        ]
+    )
+    prompt = f"Original User Task: {original_task}\n\nThe performance analysis phase is complete. Below are the project documents and implementation files:\n\n{planning_docs}\n\nPlease begin code review following the Code Review Agent instructions."
+    return prompt
 
-{formatted_qa}
 
-Instruction: Now update the performance documents with these answers.
-You must return the full updated files in your `files_to_write` array.
-"""
+def process_code_review_response(ctx, node_input) -> Event:
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "code_review_",
+        CODE_REVIEW_OUTPUT_DIR,
+        "Entering Code Review Q&A Phase to collect your answers...",
+        "Code Review Phase is complete. Workflow finished!",
+    )
+
+
+def ask_code_review_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "code_review_")
+
+
+def save_code_review_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "code_review_")
+
+
+def format_code_review_update_prompt(ctx, node_input):
+    return _format_update_prompt_helper(
+        node_input,
+        """Instruction: Now update the code review documents with these answers.
+You must return the full updated files in your `files_to_write` array.""",
+    )
+
+
+def prepare_cicd_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+            DEBUGGER_OUTPUT_DIR,
+            SECURITY_OUTPUT_DIR,
+            PERFORMANCE_OUTPUT_DIR,
+            CODE_REVIEW_OUTPUT_DIR,
+        ]
+    )
+    file_contents = original_task + "\n" + planning_docs
+    return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform CI/CD tasks based on your system instructions. Output the created/updated files."
+
+
+def process_cicd_response(ctx, node_input) -> Event:
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "cicd_",
+        CICD_OUTPUT_DIR,
+        "Entering CI/CD Q&A Phase to collect your answers...",
+        "CI/CD Phase is complete. Proceeding to next phase...",
+    )
+
+
+def ask_cicd_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "cicd_")
+
+
+def save_cicd_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "cicd_")
+
+
+def format_cicd_update_prompt(ctx, node_input):
+    return _format_update_prompt_helper(
+        node_input,
+        "Instruction: Now update the CI/CD files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
+    )
+
+
+def prepare_notifier_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+            DEBUGGER_OUTPUT_DIR,
+            SECURITY_OUTPUT_DIR,
+            PERFORMANCE_OUTPUT_DIR,
+            CODE_REVIEW_OUTPUT_DIR,
+        ]
+    )
+    file_contents = original_task + "\n" + planning_docs
+    return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform Notifier tasks based on your system instructions. Output the created/updated files."
+
+
+def process_notifier_response(ctx, node_input) -> Event:
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "notifier_",
+        NOTIFIER_OUTPUT_DIR,
+        "Entering Notifier Q&A Phase to collect your answers...",
+        "Notifier Phase is complete. Proceeding to next phase...",
+    )
+
+
+def ask_notifier_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "notifier_")
+
+
+def save_notifier_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "notifier_")
+
+
+def format_notifier_update_prompt(ctx, node_input):
+    return _format_update_prompt_helper(
+        node_input,
+        "Instruction: Now update the Notifier files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
+    )
+
+
+def prepare_monitoring_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+            DEBUGGER_OUTPUT_DIR,
+            SECURITY_OUTPUT_DIR,
+            PERFORMANCE_OUTPUT_DIR,
+            CODE_REVIEW_OUTPUT_DIR,
+        ]
+    )
+    file_contents = original_task + "\n" + planning_docs
+    return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform Monitoring tasks based on your system instructions. Output the created/updated files."
+
+
+def process_monitoring_response(ctx, node_input) -> Event:
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "monitoring_",
+        MONITORING_OUTPUT_DIR,
+        "Entering Monitoring Q&A Phase to collect your answers...",
+        "Monitoring Phase is complete. Proceeding to next phase...",
+    )
+
+
+def ask_monitoring_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "monitoring_")
+
+
+def save_monitoring_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "monitoring_")
+
+
+def format_monitoring_update_prompt(ctx, node_input):
+    return _format_update_prompt_helper(
+        node_input,
+        "Instruction: Now update the Monitoring files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
+    )
+
+
+def prepare_research_prompt(ctx, node_input):
+    original_task = ctx.state.get("original_task", "")
+    planning_docs = _read_planning_docs(
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+            TEST_WRITER_OUTPUT_DIR,
+            DEBUGGER_OUTPUT_DIR,
+            SECURITY_OUTPUT_DIR,
+            PERFORMANCE_OUTPUT_DIR,
+            CODE_REVIEW_OUTPUT_DIR,
+        ]
+    )
+    file_contents = original_task + "\n" + planning_docs
+    return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform Research tasks based on your system instructions. Output the created/updated files."
+
+
+def process_research_response(ctx, node_input) -> Event:
+    return _process_response_helper(
+        ctx,
+        node_input,
+        "research_",
+        RESEARCH_OUTPUT_DIR,
+        "Entering Research Q&A Phase to collect your answers...",
+        "Research Phase is complete. Proceeding to next phase...",
+    )
+
+
+def ask_research_questions_node(ctx, node_input):
+    return _ask_questions_helper(ctx, "research_")
+
+
+def save_research_answer_node(ctx, node_input):
+    return _save_answer_helper(ctx, node_input, "research_")
+
+
+def format_research_update_prompt(ctx, node_input):
+    return _format_update_prompt_helper(
+        node_input,
+        "Instruction: Now update the Research files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
+    )
 
 
 def end_workflow_node(ctx, node_input):
@@ -944,7 +1016,7 @@ root_agent = Workflow(
             process_performance_response,
             {
                 "ask_questions": ask_performance_questions_node,
-                "done": end_workflow_node,
+                "done": prepare_code_review_prompt,
             },
         ),
         (ask_performance_questions_node, save_performance_answer_node),
@@ -956,6 +1028,96 @@ root_agent = Workflow(
             },
         ),
         (format_performance_update_prompt, performance_agent),
+        (prepare_code_review_prompt, code_review_agent),
+        (code_review_agent, process_code_review_response),
+        (
+            process_code_review_response,
+            {
+                "ask_questions": ask_code_review_questions_node,
+                "done": prepare_cicd_prompt,
+            },
+        ),
+        (ask_code_review_questions_node, save_code_review_answer_node),
+        (
+            save_code_review_answer_node,
+            {
+                "ask_more": ask_code_review_questions_node,
+                "finished": format_code_review_update_prompt,
+            },
+        ),
+        (format_code_review_update_prompt, code_review_agent),
+        (prepare_cicd_prompt, cicd_agent),
+        (cicd_agent, process_cicd_response),
+        (
+            process_cicd_response,
+            {
+                "ask_questions": ask_cicd_questions_node,
+                "done": prepare_notifier_prompt,
+            },
+        ),
+        (ask_cicd_questions_node, save_cicd_answer_node),
+        (
+            save_cicd_answer_node,
+            {
+                "ask_more": ask_cicd_questions_node,
+                "finished": format_cicd_update_prompt,
+            },
+        ),
+        (format_cicd_update_prompt, cicd_agent),
+        (prepare_notifier_prompt, notifier_agent),
+        (notifier_agent, process_notifier_response),
+        (
+            process_notifier_response,
+            {
+                "ask_questions": ask_notifier_questions_node,
+                "done": prepare_monitoring_prompt,
+            },
+        ),
+        (ask_notifier_questions_node, save_notifier_answer_node),
+        (
+            save_notifier_answer_node,
+            {
+                "ask_more": ask_notifier_questions_node,
+                "finished": format_notifier_update_prompt,
+            },
+        ),
+        (format_notifier_update_prompt, notifier_agent),
+        (prepare_monitoring_prompt, monitoring_agent),
+        (monitoring_agent, process_monitoring_response),
+        (
+            process_monitoring_response,
+            {
+                "ask_questions": ask_monitoring_questions_node,
+                "done": prepare_research_prompt,
+            },
+        ),
+        (ask_monitoring_questions_node, save_monitoring_answer_node),
+        (
+            save_monitoring_answer_node,
+            {
+                "ask_more": ask_monitoring_questions_node,
+                "finished": format_monitoring_update_prompt,
+            },
+        ),
+        (format_monitoring_update_prompt, monitoring_agent),
+        (prepare_research_prompt, research_agent),
+        (research_agent, process_research_response),
+        (
+            process_research_response,
+            {
+                "ask_questions": ask_research_questions_node,
+                "done": end_workflow_node,
+            },
+        ),
+        (ask_research_questions_node, save_research_answer_node),
+        (
+            save_research_answer_node,
+            {
+                "ask_more": ask_research_questions_node,
+                "finished": format_research_update_prompt,
+            },
+        ),
+        (format_research_update_prompt, research_agent),
     ],
-    description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan.",
+    description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan, sets up the environment, codes, writes tests, debugs, and performs security and performance analysis, and finally code review.",
 )
