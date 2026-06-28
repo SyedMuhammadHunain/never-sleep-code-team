@@ -84,6 +84,20 @@ def _parse_agent_response(node_input) -> AgentResponse:
         return AgentResponse(**node_input.output)
     if hasattr(node_input, "output") and isinstance(node_input.output, AgentResponse):
         return node_input.output
+    text_to_parse = None
+    if isinstance(node_input, str):
+        text_to_parse = node_input
+    elif hasattr(node_input, "output") and isinstance(node_input.output, str):
+        text_to_parse = node_input.output
+
+    if text_to_parse:
+        try:
+            if "```json" in text_to_parse:
+                text_to_parse = text_to_parse.split("```json")[1].split("```")[0]
+            data = json.loads(text_to_parse)
+            return AgentResponse(**data)
+        except Exception:
+            pass
     if (
         hasattr(node_input, "content")
         and node_input.content
@@ -1119,4 +1133,4 @@ _root_agent_workflow = Workflow(
     description="A workflow that takes a project idea, generates structured planning documents, designs the architecture, creates UI/UX specs, and creates a task plan, sets up the environment, codes, writes tests, debugs, and performs security and performance analysis, and finally code review.",
 )
 
-root_agent = research_agent
+root_agent = _root_agent_workflow
