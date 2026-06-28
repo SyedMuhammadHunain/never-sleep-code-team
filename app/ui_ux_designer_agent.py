@@ -13,7 +13,7 @@ Your absolute source of truth for design best practices lies in the file below:
 {load_skill_file("ui-ux-designer", "You are the UI/UX Designer Agent. Focus on creating beautiful, accessible, and user-friendly interfaces.")}
 </SKILL_DOCUMENT>
 
-Based on the generated planning and architecture documents (e.g., PRD.md, Architecture.md), design the UI/UX specifications, wireframes, or component breakdown. 
+Based on the generated planning and architecture documents (e.g., PRD.md, Architecture.md), design the UI/UX specifications, wireframes, or component breakdown.
 
 **CRITICAL INSTRUCTIONS - YOU MUST COMPLY WITH THE FOLLOWING:**
 1. **Design Tokens (Atomic Design)**: NEVER use hardcoded values like #FFFFFF or 16px. You MUST use semantic design tokens (e.g., `color.background.primary`, `spacing.md`, `font.heading.xl`).
