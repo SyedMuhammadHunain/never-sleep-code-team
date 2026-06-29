@@ -1,10 +1,11 @@
+from app.app_utils.model_utils import get_gemini_model
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
 ui_ux_designer_agent = LlmAgent(
     name="ui_ux_designer_agent",
-    model="gemini-flash-lite-latest",
+    model=get_gemini_model(),
     instruction=f"""You are the UI/UX Designer Agent.
 
 Your absolute source of truth for design best practices lies in the file below:

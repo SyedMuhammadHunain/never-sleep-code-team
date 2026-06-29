@@ -1,10 +1,11 @@
+from app.app_utils.model_utils import get_gemini_model
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
 monitoring_agent = LlmAgent(
     name="monitoring_agent",
-    model="gemini-flash-lite-latest",
+    model=get_gemini_model(),
     instruction=f"""You are the Monitoring Agent for the project.
 Your primary role is to set up robust observability, logging, and metrics using Langfuse and similar monitoring tools.
 

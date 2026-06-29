@@ -1,10 +1,11 @@
+from app.app_utils.model_utils import get_gemini_model
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
 task_planner_agent = LlmAgent(
     name="task_planner_agent",
-    model="gemini-flash-lite-latest",
+    model=get_gemini_model(),
     instruction=f"""You are the Task Planner Agent.
 Your absolute source of truth lies in the file below:
 

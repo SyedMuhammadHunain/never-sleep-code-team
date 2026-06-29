@@ -1,3 +1,4 @@
+from app.app_utils.model_utils import get_gemini_model
 import json
 import os
 from typing import List
@@ -54,7 +55,7 @@ FILE_SEQUENCE = [
 
 requirement_agent = LlmAgent(
     name="requirement_agent",
-    model="gemini-flash-lite-latest",
+    model=get_gemini_model(),
     instruction=f"""You are the Requirement Agent.
 Your absolute source of truth lies in the file below:
 
