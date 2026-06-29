@@ -4,7 +4,7 @@ from google.genai import types
 
 def get_gemini_model():
     return Gemini(
-        model="gemini-2.5-flash",
+        model="gemini-flash-lite-latest",
         retry_options=types.HttpRetryOptions(
             attempts=3,
             exp_base=2,
