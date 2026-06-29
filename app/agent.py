@@ -379,7 +379,7 @@ def process_phase_response(
         status_messages.append(f"\n{qa_phase_message}")
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
-    if hasattr(response, "has_more_tasks"):
+    if prefix == "coder_" and hasattr(response, "has_more_tasks"):
         ctx.state["is_project_complete"] = not response.has_more_tasks
 
     status_messages.append(f"\n{done_message}")
