@@ -23,13 +23,22 @@ A powerful multi-agent system powered by **Google ADK 2.0**. It orchestrates spe
 
 ## 🏗️ Architecture
 
-The workflow routes through the following specialized AI agents:
+The workflow routes through the following 15 specialized AI agents:
 1. **Requirement Agent**: Scaffolds requirements and plans.
 2. **Architecture Agent**: Generates system design.
-3. **Test Writer**: Creates automated tests.
-4. **Coder Agent**: Implements the logic.
-5. **Security Agent**: Scans for vulnerabilities.
-6. **Code Reviewer**: Enforces quality checks.
+3. **UI/UX Designer Agent**: Creates UI/UX specifications and design documents.
+4. **Task Planner Agent**: Breaks down tasks and creates implementation plans.
+5. **Env Setup Agent**: Generates environment configuration (e.g. `mise.toml`).
+6. **Coder Agent**: Implements the application logic incrementally.
+7. **Test Writer Agent**: Creates automated tests (TDD).
+8. **Debugger Agent**: Identifies and resolves errors or bugs.
+9. **Security Agent**: Scans for vulnerabilities.
+10. **Performance Agent**: Analyzes and optimizes code performance.
+11. **Code Review Agent**: Enforces code quality and logic checks.
+12. **CI/CD Agent**: Generates deployment and pipeline configurations.
+13. **Notifier Agent**: Handles alerts and notification configurations.
+14. **Monitoring Agent**: Configures observability and monitoring tools.
+15. **Research Agent**: Conducts deep technical research for complex problems.
 
 > [!NOTE]
 > The agents are powered by **Gemini 2.5 Flash** using the `NeverSleepLlmAgent` wrapper to handle advanced output parsing, JSON schema compliance, and quota safety.
