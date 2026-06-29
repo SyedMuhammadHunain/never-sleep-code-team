@@ -4,11 +4,11 @@ from google.genai import types
 
 def get_gemini_model():
     return Gemini(
-        model="gemini-flash-lite-latest",
+        model="gemini-2.5-flash",
         retry_options=types.HttpRetryOptions(
-            attempts=5,
-            exp_base=5,
-            initial_delay=1,
-            http_status_codes=[429, 500, 503, 504],
+            attempts=3,
+            exp_base=2,
+            initial_delay=2,
+            http_status_codes=[500, 503, 504],
         ),
     )
