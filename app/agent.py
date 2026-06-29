@@ -277,6 +277,24 @@ def read_generated_documents(extra_output_dirs: List[str]) -> str:
                     not in ("node_modules", ".git", ".adk", "dist", "build", "coverage")
                 ]
                 for filename in files:
+                    if filename in (
+                        "package-lock.json",
+                        "yarn.lock",
+                        "pnpm-lock.yaml",
+                    ) or filename.endswith(
+                        (
+                            ".png",
+                            ".jpg",
+                            ".jpeg",
+                            ".gif",
+                            ".svg",
+                            ".ico",
+                            ".log",
+                            ".db",
+                            ".pyc",
+                        )
+                    ):
+                        continue
                     filepath = os.path.join(root, filename)
                     if os.path.isfile(filepath):
                         with open(
