@@ -1,26 +1,61 @@
-# Never Sleep Code Team
+<div align="center">
+  
+  # 🤖 Never Sleep Code Team
+  *A multi-agent graph workflow for autonomous code generation and validation*
+  
+  [![Python](https://img.shields.io/badge/Python->=3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+  [![Google ADK](https://img.shields.io/badge/Google_ADK-2.0-blue?style=flat-square)](https://github.com/google/agent-development-kit)
+  [![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-orange?style=flat-square)](https://ai.google.dev/)
 
-A Google ADK-powered graph workflow project for automated multi-agent coding. 
-This project orchestrates specialized AI agents (Requirement, Architecture, Testing, Coding, Security, and Code Review) to autonomously generate and validate complete applications based on user prompts.
+  [Features](#features) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage)
 
-## Architecture
+</div>
 
-- **ADK 2.0 Graph Workflow**: Nodes are defined in `app/agent.py`.
-- **LLM**: Gemini 2.5 Flash via `NeverSleepLlmAgent`.
-- **Agents**:
-  - `Requirement Agent`: Scaffolds specs and plans.
-  - `Architecture Agent`: Generates system design.
-  - `Test Writer`: Creates automated tests (TDD).
-  - `Coder Agent`: Implements the application logic.
-  - `Security Agent`: Scans for vulnerabilities.
-  - `Code Reviewer`: Enforces quality and logic checks.
+A powerful multi-agent system powered by **Google ADK 2.0**. It orchestrates specialized AI agents to autonomously plan, architect, test, code, review, and secure complete applications based solely on your natural language prompts.
 
-## Development
+## ✨ Features
 
-- **Prerequisites**: Python >= 3.11, Google ADK.
-- **Install dependencies**: `uv sync`
-- **Run playground**: `agents-cli playground`
-- **Run one-off task**: `agents-cli run "Create a Todo app"`
+- 🧠 **Autonomous Planning** - Requirement and Architecture agents scaffold specs, design docs, and implementation steps.
+- 🧪 **Test-Driven Development (TDD)** - Test Writer agent generates automated tests before implementation.
+- 💻 **Code Generation** - Coder agent implements application logic based on the test and architecture specs.
+- 🛡️ **Built-in Quality & Security** - Dedicated Security and Code Review agents scan for vulnerabilities and enforce logic checks.
+- 🔄 **Graph Workflow** - Fully orchestrated state machine via ADK nodes and events.
 
-## Environment
-Copy `.env.example` to `.env` and set your `GOOGLE_API_KEY`.
+## 🏗️ Architecture
+
+The workflow routes through the following specialized AI agents:
+1. **Requirement Agent**: Scaffolds requirements and plans.
+2. **Architecture Agent**: Generates system design.
+3. **Test Writer**: Creates automated tests.
+4. **Coder Agent**: Implements the logic.
+5. **Security Agent**: Scans for vulnerabilities.
+6. **Code Reviewer**: Enforces quality checks.
+
+> [!NOTE]
+> The agents are powered by **Gemini 2.5 Flash** using the `NeverSleepLlmAgent` wrapper to handle advanced output parsing, JSON schema compliance, and quota safety.
+
+## 🚀 Installation
+
+Ensure you have Python 3.11+ and the Google Agent Development Kit (ADK) installed.
+
+```bash
+# Clone the repository and install dependencies using uv
+uv sync
+
+# Copy environment variables and add your Google API key
+cp .env.example .env
+```
+
+## 💻 Usage
+
+You can run the agent locally through the `agents-cli` tool.
+
+**Run an interactive playground:**
+```bash
+agents-cli playground
+```
+
+**Run a single, one-off task:**
+```bash
+agents-cli run "Create a fast and secure Todo app in React"
+```
