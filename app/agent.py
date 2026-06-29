@@ -77,7 +77,7 @@ def store_task_node(ctx, node_input):
     return node_input
 
 
-def _parse_agent_response(node_input) -> AgentResponse:
+def parse_agent_response(node_input) -> AgentResponse:
     if isinstance(node_input, dict):
         return AgentResponse(**node_input)
     if hasattr(node_input, "output") and isinstance(node_input.output, dict):
@@ -116,7 +116,7 @@ def _parse_agent_response(node_input) -> AgentResponse:
     return node_input
 
 
-def _save_planning_files(
+def save_generated_files(
     files_to_write: List[FileToWrite], output_dir: str
 ) -> List[str]:
     """Saves generated files to disk in the specified output directory and returns success messages."""
@@ -133,7 +133,7 @@ def _save_planning_files(
     return messages
 
 
-def _build_status_messages(
+def build_status_messages(
     response: AgentResponse, file_messages: List[str]
 ) -> List[str]:
     """Compiles status messages including file creations, questions, and agent messages."""
@@ -155,7 +155,7 @@ def process_agent_response(ctx, node_input) -> Event:
     if is_initial_run:
         ctx.state["is_first_pass"] = False
 
-    response = _parse_agent_response(node_input)
+    response = parse_agent_response(node_input)
     if not isinstance(response, AgentResponse):
         return Event(
             output=f"System Error: Expected AgentResponse, got {type(response)}",
@@ -163,11 +163,11 @@ def process_agent_response(ctx, node_input) -> Event:
         )
 
     file_messages = (
-        _save_planning_files(response.files_to_write, REQ_OUTPUT_DIR)
+        save_generated_files(response.files_to_write, REQ_OUTPUT_DIR)
         if response.files_to_write
         else []
     )
-    status_messages = _build_status_messages(response, file_messages)
+    status_messages = build_status_messages(response, file_messages)
 
     if is_initial_run and response.clarifying_questions:
         ctx.state["pending_questions"] = response.clarifying_questions.copy()
@@ -177,7 +177,7 @@ def process_agent_response(ctx, node_input) -> Event:
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
-def _ask_questions_helper(ctx, prefix=""):
+def prompt_for_clarification(ctx, prefix=""):
     pending_key = f"{prefix}pending_questions" if prefix else "pending_questions"
     current_key = f"{prefix}current_question" if prefix else "current_question"
     pending_questions = ctx.state.get(pending_key, [])
@@ -190,7 +190,7 @@ def _ask_questions_helper(ctx, prefix=""):
     return RequestInput(message=current_question)
 
 
-def _save_answer_helper(ctx, node_input, prefix=""):
+def store_user_answer(ctx, node_input, prefix=""):
     answer = getattr(node_input, "text", str(node_input))
     current_key = f"{prefix}current_question" if prefix else "current_question"
     qa_key = f"{prefix}qa_pairs" if prefix else "qa_pairs"
@@ -213,11 +213,11 @@ def _save_answer_helper(ctx, node_input, prefix=""):
 
 
 def ask_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "")
+    return prompt_for_clarification(ctx, "")
 
 
 def save_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "")
+    return store_user_answer(ctx, node_input, "")
 
 
 def format_update_prompt(ctx, node_input):
@@ -239,7 +239,7 @@ Ensure that the Design.md file is updated on the disk based on the new inputs fr
 """
 
 
-def _read_planning_docs(extra_output_dirs: List[str]) -> str:
+def read_generated_documents(extra_output_dirs: List[str]) -> str:
     planning_docs = ""
     for filename in FILE_SEQUENCE:
         filepath = os.path.join(REQ_OUTPUT_DIR, filename)
@@ -264,13 +264,13 @@ def _read_planning_docs(extra_output_dirs: List[str]) -> str:
 
 def prepare_architecture_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs([])
+    planning_docs = read_generated_documents([])
     prompt = f"Original User Task: {original_task}\n\nThe requirement phase is now complete. Below are the generated planning documents:\n\n{planning_docs}\n\nPlease generate the software architecture and save it via `files_to_write`."
     return prompt
 
 
 def process_arch_response(ctx, node_input) -> Event:
-    response = _parse_agent_response(node_input)
+    response = parse_agent_response(node_input)
 
     if not isinstance(response, AgentResponse):
         return Event(
@@ -278,7 +278,7 @@ def process_arch_response(ctx, node_input) -> Event:
         )
 
     file_messages = (
-        _save_planning_files(response.files_to_write, ARCH_OUTPUT_DIR)
+        save_generated_files(response.files_to_write, ARCH_OUTPUT_DIR)
         if getattr(response, "files_to_write", None)
         else []
     )
@@ -297,13 +297,13 @@ def process_arch_response(ctx, node_input) -> Event:
 
 def prepare_ui_ux_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs([ARCH_OUTPUT_DIR])
+    planning_docs = read_generated_documents([ARCH_OUTPUT_DIR])
     prompt = f"Original User Task: {original_task}\n\nThe architecture phase is now complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the UI/UX specifications and design documents via `files_to_write`."
     return prompt
 
 
 def process_ui_ux_response(ctx, node_input) -> Event:
-    response = _parse_agent_response(node_input)
+    response = parse_agent_response(node_input)
 
     if not isinstance(response, AgentResponse):
         return Event(
@@ -311,7 +311,7 @@ def process_ui_ux_response(ctx, node_input) -> Event:
         )
 
     file_messages = (
-        _save_planning_files(response.files_to_write, UI_UX_OUTPUT_DIR)
+        save_generated_files(response.files_to_write, UI_UX_OUTPUT_DIR)
         if getattr(response, "files_to_write", None)
         else []
     )
@@ -328,12 +328,12 @@ def process_ui_ux_response(ctx, node_input) -> Event:
 
 def prepare_task_planner_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs([ARCH_OUTPUT_DIR, UI_UX_OUTPUT_DIR])
+    planning_docs = read_generated_documents([ARCH_OUTPUT_DIR, UI_UX_OUTPUT_DIR])
     prompt = f"Original User Task: {original_task}\n\nThe requirement, architecture, and UI/UX phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the TaskPlan.md via `files_to_write`."
     return prompt
 
 
-def _process_response_helper(
+def process_phase_response(
     ctx,
     node_input,
     prefix: str,
@@ -347,7 +347,7 @@ def _process_response_helper(
         ctx.state[f"is_{prefix}first_pass"] = False
         ctx.state[f"{prefix}qa_pairs"] = {}
 
-    response = _parse_agent_response(node_input)
+    response = parse_agent_response(node_input)
 
     if not isinstance(response, AgentResponse):
         return Event(
@@ -355,12 +355,12 @@ def _process_response_helper(
         )
 
     file_messages = (
-        _save_planning_files(response.files_to_write, output_dir)
+        save_generated_files(response.files_to_write, output_dir)
         if getattr(response, "files_to_write", None)
         else []
     )
 
-    status_messages = _build_status_messages(response, file_messages)
+    status_messages = build_status_messages(response, file_messages)
 
     if is_initial_run and getattr(response, "clarifying_questions", None):
         ctx.state[f"{prefix}pending_questions"] = response.clarifying_questions.copy()
@@ -372,7 +372,7 @@ def _process_response_helper(
 
 
 def process_task_planner_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "task_planner_",
@@ -383,14 +383,14 @@ def process_task_planner_response(ctx, node_input) -> Event:
 
 
 def ask_task_planner_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "task_planner_")
+    return prompt_for_clarification(ctx, "task_planner_")
 
 
 def save_task_planner_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "task_planner_")
+    return store_user_answer(ctx, node_input, "task_planner_")
 
 
-def _format_update_prompt_helper(node_input, instruction_text: str) -> str:
+def generate_update_prompt(node_input, instruction_text: str) -> str:
     qa_pairs = node_input
     formatted_qa = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in qa_pairs.items())
     return f"""Based on the original task and the previously generated documents, you asked some clarifying questions.
@@ -402,7 +402,7 @@ Here are the user's answers to the clarifying questions:
 
 
 def format_task_planner_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update TaskPlan.md with these answers.
 You must return the full updated TaskPlan.md file in your `files_to_write` array.
@@ -412,7 +412,7 @@ Ensure that the TaskPlan.md file is updated based on the new inputs from the use
 
 def prepare_env_setup_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [ARCH_OUTPUT_DIR, UI_UX_OUTPUT_DIR, TASK_PLAN_OUTPUT_DIR]
     )
     prompt = f"Original User Task: {original_task}\n\nThe planning phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease generate the mise.toml configuration via `files_to_write`."
@@ -420,7 +420,7 @@ def prepare_env_setup_prompt(ctx, node_input):
 
 
 def process_env_setup_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "env_setup_",
@@ -431,15 +431,15 @@ def process_env_setup_response(ctx, node_input) -> Event:
 
 
 def ask_env_setup_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "env_setup_")
+    return prompt_for_clarification(ctx, "env_setup_")
 
 
 def save_env_setup_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "env_setup_")
+    return store_user_answer(ctx, node_input, "env_setup_")
 
 
 def format_env_setup_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update mise.toml with these answers.
 You must return the full updated mise.toml file in your `files_to_write` array.
@@ -449,7 +449,7 @@ Ensure that the mise.toml file is updated based on the new inputs from the user.
 
 def prepare_coder_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [ARCH_OUTPUT_DIR, UI_UX_OUTPUT_DIR, TASK_PLAN_OUTPUT_DIR, ENV_SETUP_OUTPUT_DIR]
     )
     prompt = f"Original User Task: {original_task}\n\nThe planning and setup phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease begin implementing the tasks following the Coder Agent instructions."
@@ -457,7 +457,7 @@ def prepare_coder_prompt(ctx, node_input):
 
 
 def process_coder_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "coder_",
@@ -468,15 +468,15 @@ def process_coder_response(ctx, node_input) -> Event:
 
 
 def ask_coder_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "coder_")
+    return prompt_for_clarification(ctx, "coder_")
 
 
 def save_coder_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "coder_")
+    return store_user_answer(ctx, node_input, "coder_")
 
 
 def format_coder_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update the implementation files with these answers.
 You must return the full updated files in your `files_to_write` array.""",
@@ -485,7 +485,7 @@ You must return the full updated files in your `files_to_write` array.""",
 
 def prepare_test_writer_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -499,7 +499,7 @@ def prepare_test_writer_prompt(ctx, node_input):
 
 
 def process_test_writer_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "test_writer_",
@@ -510,15 +510,15 @@ def process_test_writer_response(ctx, node_input) -> Event:
 
 
 def ask_test_writer_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "test_writer_")
+    return prompt_for_clarification(ctx, "test_writer_")
 
 
 def save_test_writer_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "test_writer_")
+    return store_user_answer(ctx, node_input, "test_writer_")
 
 
 def format_test_writer_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update the test files with these answers.
 You must return the full updated files in your `files_to_write` array.""",
@@ -527,7 +527,7 @@ You must return the full updated files in your `files_to_write` array.""",
 
 def prepare_debugger_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -542,7 +542,7 @@ def prepare_debugger_prompt(ctx, node_input):
 
 
 def process_debugger_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "debugger_",
@@ -553,15 +553,15 @@ def process_debugger_response(ctx, node_input) -> Event:
 
 
 def ask_debugger_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "debugger_")
+    return prompt_for_clarification(ctx, "debugger_")
 
 
 def save_debugger_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "debugger_")
+    return store_user_answer(ctx, node_input, "debugger_")
 
 
 def format_debugger_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update the code with these answers.
 You must return the full updated files in your `files_to_write` array.""",
@@ -570,7 +570,7 @@ You must return the full updated files in your `files_to_write` array.""",
 
 def prepare_security_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -586,7 +586,7 @@ def prepare_security_prompt(ctx, node_input):
 
 
 def process_security_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "security_",
@@ -597,15 +597,15 @@ def process_security_response(ctx, node_input) -> Event:
 
 
 def ask_security_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "security_")
+    return prompt_for_clarification(ctx, "security_")
 
 
 def save_security_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "security_")
+    return store_user_answer(ctx, node_input, "security_")
 
 
 def format_security_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update the security documents with these answers.
 You must return the full updated files in your `files_to_write` array.""",
@@ -614,7 +614,7 @@ You must return the full updated files in your `files_to_write` array.""",
 
 def prepare_performance_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -631,7 +631,7 @@ def prepare_performance_prompt(ctx, node_input):
 
 
 def process_performance_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "performance_",
@@ -642,15 +642,15 @@ def process_performance_response(ctx, node_input) -> Event:
 
 
 def ask_performance_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "performance_")
+    return prompt_for_clarification(ctx, "performance_")
 
 
 def save_performance_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "performance_")
+    return store_user_answer(ctx, node_input, "performance_")
 
 
 def format_performance_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update the performance documents with these answers.
 You must return the full updated files in your `files_to_write` array.""",
@@ -659,7 +659,7 @@ You must return the full updated files in your `files_to_write` array.""",
 
 def prepare_code_review_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -677,7 +677,7 @@ def prepare_code_review_prompt(ctx, node_input):
 
 
 def process_code_review_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "code_review_",
@@ -688,15 +688,15 @@ def process_code_review_response(ctx, node_input) -> Event:
 
 
 def ask_code_review_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "code_review_")
+    return prompt_for_clarification(ctx, "code_review_")
 
 
 def save_code_review_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "code_review_")
+    return store_user_answer(ctx, node_input, "code_review_")
 
 
 def format_code_review_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         """Instruction: Now update the code review documents with these answers.
 You must return the full updated files in your `files_to_write` array.""",
@@ -705,7 +705,7 @@ You must return the full updated files in your `files_to_write` array.""",
 
 def prepare_cicd_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -724,7 +724,7 @@ def prepare_cicd_prompt(ctx, node_input):
 
 
 def process_cicd_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "cicd_",
@@ -735,15 +735,15 @@ def process_cicd_response(ctx, node_input) -> Event:
 
 
 def ask_cicd_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "cicd_")
+    return prompt_for_clarification(ctx, "cicd_")
 
 
 def save_cicd_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "cicd_")
+    return store_user_answer(ctx, node_input, "cicd_")
 
 
 def format_cicd_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         "Instruction: Now update the CI/CD files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
     )
@@ -751,7 +751,7 @@ def format_cicd_update_prompt(ctx, node_input):
 
 def prepare_notifier_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -770,7 +770,7 @@ def prepare_notifier_prompt(ctx, node_input):
 
 
 def process_notifier_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "notifier_",
@@ -781,15 +781,15 @@ def process_notifier_response(ctx, node_input) -> Event:
 
 
 def ask_notifier_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "notifier_")
+    return prompt_for_clarification(ctx, "notifier_")
 
 
 def save_notifier_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "notifier_")
+    return store_user_answer(ctx, node_input, "notifier_")
 
 
 def format_notifier_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         "Instruction: Now update the Notifier files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
     )
@@ -797,7 +797,7 @@ def format_notifier_update_prompt(ctx, node_input):
 
 def prepare_monitoring_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -816,7 +816,7 @@ def prepare_monitoring_prompt(ctx, node_input):
 
 
 def process_monitoring_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "monitoring_",
@@ -827,15 +827,15 @@ def process_monitoring_response(ctx, node_input) -> Event:
 
 
 def ask_monitoring_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "monitoring_")
+    return prompt_for_clarification(ctx, "monitoring_")
 
 
 def save_monitoring_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "monitoring_")
+    return store_user_answer(ctx, node_input, "monitoring_")
 
 
 def format_monitoring_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         "Instruction: Now update the Monitoring files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
     )
@@ -843,7 +843,7 @@ def format_monitoring_update_prompt(ctx, node_input):
 
 def prepare_research_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
-    planning_docs = _read_planning_docs(
+    planning_docs = read_generated_documents(
         [
             ARCH_OUTPUT_DIR,
             UI_UX_OUTPUT_DIR,
@@ -862,7 +862,7 @@ def prepare_research_prompt(ctx, node_input):
 
 
 def process_research_response(ctx, node_input) -> Event:
-    return _process_response_helper(
+    return process_phase_response(
         ctx,
         node_input,
         "research_",
@@ -873,15 +873,15 @@ def process_research_response(ctx, node_input) -> Event:
 
 
 def ask_research_questions_node(ctx, node_input):
-    return _ask_questions_helper(ctx, "research_")
+    return prompt_for_clarification(ctx, "research_")
 
 
 def save_research_answer_node(ctx, node_input):
-    return _save_answer_helper(ctx, node_input, "research_")
+    return store_user_answer(ctx, node_input, "research_")
 
 
 def format_research_update_prompt(ctx, node_input):
-    return _format_update_prompt_helper(
+    return generate_update_prompt(
         node_input,
         "Instruction: Now update the Research files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
     )

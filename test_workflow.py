@@ -1,5 +1,5 @@
 import asyncio
-from app.agent import root_agent
+from app import app
 from google.adk import Runner
 from google.genai import types
 
@@ -10,7 +10,7 @@ from google.adk.sessions import InMemorySessionService
 async def main():
     print("Running workflow test...")
     runner = Runner(
-        agent=root_agent,
+        app=app,
         app_name="test_app",
         session_service=InMemorySessionService(),
         auto_create_session=True,

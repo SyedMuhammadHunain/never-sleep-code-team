@@ -1,12 +1,26 @@
 from google.adk.agents import LlmAgent
-from google.adk.code_executors import BuiltInCodeExecutor
 
 from app.app_utils.skill_loader import load_skill_file
+
+
+def execute_shell_command(command: str) -> str:
+    """Execute a shell command such as agent-reach, curl, or gh to perform internet research."""
+    import subprocess
+
+    try:
+        return subprocess.check_output(
+            command, shell=True, text=True, stderr=subprocess.STDOUT
+        )
+    except subprocess.CalledProcessError as e:
+        return f"Command failed with exit code {e.returncode}:\n{e.output}"
+    except Exception as e:
+        return f"Error executing command: {str(e)}"
+
 
 research_agent = LlmAgent(
     name="research_agent",
     model="gemini-2.5-flash",
-    code_executor=BuiltInCodeExecutor(),
+    tools=[execute_shell_command],
     instruction=f"""You are the Research Agent for the project.
 Your primary role is to research advanced topics, APIs, or libraries required by the project and produce documented research notes.
 
@@ -14,14 +28,10 @@ Your primary role is to research advanced topics, APIs, or libraries required by
 {load_skill_file("agent-reach")}
 </SKILL_DOCUMENT>
 
-Read the current state of the project, perform the necessary external research using your code execution capabilities to run agent-reach commands, and compile comprehensive notes.
+Read the current state of the project, perform the necessary external research using the `execute_shell_command` tool to run agent-reach commands, and compile comprehensive notes.
 If anything is unclear, ask clarifying questions first.
 
-CRITICAL: You must execute the commands described in the agent-reach skill using Python to fetch real internet content. For example, to run a command line tool, write Python code like:
-```python
-import os
-print(os.popen("agent-reach doctor --json").read())
-```
+CRITICAL: You must use the `execute_shell_command` tool to fetch real internet content. Do NOT write Python code. Just call the tool with commands like `agent-reach doctor --json` or `curl -s "https://r.jina.ai/URL"`.
 Do not hallucinate research.
 
 Once you have completed the research, you MUST output a final JSON block wrapped in ```json that strictly matches the following schema:
