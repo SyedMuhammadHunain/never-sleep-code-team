@@ -1020,14 +1020,7 @@ _root_agent_workflow = Workflow(
             process_coder_response,
             {
                 "ask_questions": ask_coder_questions_node,
-                "done": validate_build_node,
-            },
-        ),
-        (
-            validate_build_node,
-            {
-                "validation_passed": prepare_test_writer_prompt,
-                "validation_failed": prepare_coder_prompt,
+                "done": prepare_test_writer_prompt,
             },
         ),
         (ask_coder_questions_node, save_coder_answer_node),
@@ -1142,14 +1135,7 @@ _root_agent_workflow = Workflow(
             process_cicd_response,
             {
                 "ask_questions": ask_cicd_questions_node,
-                "done": run_playwright_tests_node,
-            },
-        ),
-        (
-            run_playwright_tests_node,
-            {
-                "tests_passed": prepare_notifier_prompt,
-                "tests_failed": prepare_coder_prompt,
+                "done": prepare_notifier_prompt,
             },
         ),
         (ask_cicd_questions_node, save_cicd_answer_node),
