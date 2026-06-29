@@ -1,22 +1,22 @@
 from app.app_utils.model_utils import get_gemini_model
 from google.adk.agents import LlmAgent
 from app.schemas import AgentResponse
-from app.app_utils.skill_loader import load_skill_file
+
 
 coder_agent = LlmAgent(
     name="coder_agent",
     model=get_gemini_model(),
-    instruction=f"""You are the Coder Agent.
-Your absolute source of truth lies in the file below:
+    instruction="""You are the Coder Agent.
+You are part of an automated workflow loop. 
 
-<SKILL_DOCUMENT>
-{load_skill_file("conductor-implement")}
-</SKILL_DOCUMENT>
-
-Based on the generated project planning documents, specifications, and the mise.toml configuration, you must execute tasks from the track's implementation plan following the TDD workflow and best practices.
-
-You must strictly follow the rules in the SKILL_DOCUMENT.
-Output the resulting implementation code or updated documents via the `files_to_write` array in your AgentResponse.
+Based on the generated project planning documents and the task plan, your job is to execute the implementation iteratively.
+CRITICAL RULES FOR PREVENTING TIMEOUTS:
+1. DO NOT attempt to write the entire application at once.
+2. Review the plan.md and pick EXACTLY ONE pending task to implement in this iteration.
+3. Write the FULL, complete, production-ready code for that single task. Do not use placeholders.
+4. Output the resulting implementation code via the `files_to_write` array in your AgentResponse.
+5. If there are still pending tasks remaining after this, you MUST set `has_more_tasks=True` in your response so the workflow loops back to you. If all tasks are completed, set `has_more_tasks=False`.
+6. Apply Test-Driven Development (TDD) best practices as outlined in the conductor-implement skill.
 """,
     output_schema=AgentResponse,
 )

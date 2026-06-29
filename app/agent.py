@@ -255,11 +255,15 @@ def read_generated_documents(extra_output_dirs: List[str]) -> str:
                 with open(arch_filepath, "r") as f:
                     planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
         elif os.path.exists(directory):
-            for filename in os.listdir(directory):
-                filepath = os.path.join(directory, filename)
-                if os.path.isfile(filepath):
-                    with open(filepath, "r") as f:
-                        planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
+            for root, _, files in os.walk(directory):
+                for filename in files:
+                    filepath = os.path.join(root, filename)
+                    if os.path.isfile(filepath):
+                        with open(filepath, "r") as f:
+                            rel_path = os.path.relpath(filepath, directory)
+                            planning_docs += (
+                                f"--- {directory}/{rel_path} ---\n{f.read()}\n\n"
+                            )
     return planning_docs
 
 
@@ -464,9 +468,15 @@ Ensure that the mise.toml file is updated based on the new inputs from the user.
 def prepare_coder_prompt(ctx, node_input):
     original_task = ctx.state.get("original_task", "")
     planning_docs = read_generated_documents(
-        [ARCH_OUTPUT_DIR, UI_UX_OUTPUT_DIR, TASK_PLAN_OUTPUT_DIR, ENV_SETUP_OUTPUT_DIR]
+        [
+            ARCH_OUTPUT_DIR,
+            UI_UX_OUTPUT_DIR,
+            TASK_PLAN_OUTPUT_DIR,
+            ENV_SETUP_OUTPUT_DIR,
+            CODER_OUTPUT_DIR,
+        ]
     )
-    prompt = f"Original User Task: {original_task}\n\nThe planning and setup phases are complete. Below are the project documents:\n\n{planning_docs}\n\nPlease begin implementing the tasks following the Coder Agent instructions."
+    prompt = f"Original User Task: {original_task}\n\nThe planning and setup phases are complete. Below are the project documents AND the code you have already generated so far in previous iterations:\n\n{planning_docs}\n\nPlease implement the NEXT task following the Coder Agent instructions. Do not rewrite files you have already completed."
     return prompt
 
 
