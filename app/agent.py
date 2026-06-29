@@ -367,8 +367,21 @@ def process_phase_response(
         status_messages.append(f"\n{qa_phase_message}")
         return Event(output="\n".join(status_messages), route="ask_questions")  # type: ignore
 
+    if hasattr(response, "has_more_tasks"):
+        ctx.state["is_project_complete"] = not response.has_more_tasks
+
     status_messages.append(f"\n{done_message}")
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def check_implementation_loop_node(ctx, node_input):
+    if ctx.state.get("is_project_complete", False):
+        return Event(output=node_input, route="done")  # type: ignore
+    else:
+        return Event(
+            output="Implementation loop continuing. Returning to Coder Agent for the next tasks...",
+            route="loop_back",  # type: ignore
+        )
 
 
 def process_task_planner_response(ctx, node_input) -> Event:
@@ -1045,7 +1058,14 @@ _root_agent_workflow = Workflow(
             process_code_review_response,
             {
                 "ask_questions": ask_code_review_questions_node,
+                "done": check_implementation_loop_node,
+            },
+        ),
+        (
+            check_implementation_loop_node,
+            {
                 "done": prepare_cicd_prompt,
+                "loop_back": prepare_coder_prompt,
             },
         ),
         (ask_code_review_questions_node, save_code_review_answer_node),
