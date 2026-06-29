@@ -1,6 +1,7 @@
 from app.app_utils.model_utils import get_gemini_model
 import json
 import os
+import subprocess
 from typing import List
 
 from app.app_utils.skill_loader import load_skill_file
@@ -384,6 +385,63 @@ def process_phase_response(
 
     status_messages.append(f"\n{done_message}")
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
+
+
+def validate_build_node(ctx, node_input) -> Event:
+    """
+    Validates the generated code by attempting to build the project.
+    If the build fails, the error is routed back to the coder for fixing.
+    """
+    build_dir = CODER_OUTPUT_DIR
+
+    if not os.path.exists(os.path.join(build_dir, "package.json")):
+        return Event(
+            output="No package.json found. Skipping build validation.",
+            route="validation_passed",
+        )
+
+    try:
+        if not os.path.exists(os.path.join(build_dir, "node_modules")):
+            subprocess.run(
+                ["npm", "install"],
+                cwd=build_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+        subprocess.run(
+            ["npm", "run", "build"],
+            cwd=build_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return Event(
+            output="Build validation passed successfully.", route="validation_passed"
+        )
+    except subprocess.CalledProcessError as e:
+        error_msg = f"Build failed with the following error:\\n{e.stderr}\\n\\nPlease fix the code to resolve these build errors."
+
+        if "coder_pending_questions" not in ctx.state:
+            ctx.state["coder_pending_questions"] = []
+        ctx.state["coder_pending_questions"].append(error_msg)
+
+        return Event(
+            output="Build validation failed. Routing back to Coder Agent...",
+            route="validation_failed",
+        )
+    except subprocess.TimeoutExpired:
+        error_msg = "Build failed due to timeout. Please optimize the build process or fix infinite loops."
+        if "coder_pending_questions" not in ctx.state:
+            ctx.state["coder_pending_questions"] = []
+        ctx.state["coder_pending_questions"].append(error_msg)
+        return Event(
+            output="Build validation timed out. Routing back to Coder Agent...",
+            route="validation_failed",
+        )
 
 
 def make_phase_nodes(
@@ -884,7 +942,14 @@ _root_agent_workflow = Workflow(
             process_coder_response,
             {
                 "ask_questions": ask_coder_questions_node,
-                "done": prepare_test_writer_prompt,
+                "done": validate_build_node,
+            },
+        ),
+        (
+            validate_build_node,
+            {
+                "validation_passed": prepare_test_writer_prompt,
+                "validation_failed": prepare_coder_prompt,
             },
         ),
         (ask_coder_questions_node, save_coder_answer_node),
