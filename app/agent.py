@@ -66,6 +66,8 @@ Your absolute source of truth lies in the file below:
 
 Based on the user's task, generate ALL 8 required planning files exactly matching these names. You must provide the full content for each file in `files_to_write`:
 {", ".join(FILE_SEQUENCE)}
+
+CRITICAL: Keep the content of each file extremely CONCISE. Do not write long paragraphs. Use bullet points and minimal descriptions. Your entire JSON response MUST NOT exceed 6000 tokens, otherwise it will be truncated and fail.
 """,
     output_schema=AgentResponse,
 )
@@ -98,7 +100,8 @@ def parse_agent_response(node_input) -> AgentResponse:
                 text_to_parse = text_to_parse.split("```json")[1].split("```")[0]
             data = json.loads(text_to_parse)
             return AgentResponse(**data)
-        except Exception:
+        except Exception as e:
+            print(f"JSON Parse Error (text_to_parse): {e}")
             pass
     if (
         hasattr(node_input, "content")
@@ -113,7 +116,8 @@ def parse_agent_response(node_input) -> AgentResponse:
                         text = text.split("```json")[1].split("```")[0]
                     data = json.loads(text)
                     return AgentResponse(**data)
-                except Exception:
+                except Exception as e:
+                    print(f"JSON Parse Error (part text): {e}")
                     pass
     return node_input
 
@@ -160,11 +164,11 @@ def process_agent_response(ctx, node_input) -> Event:
     response = parse_agent_response(node_input)
     if not isinstance(response, AgentResponse):
         qa_pairs = ctx.state.get("qa_pairs", {})
-        retry_count = sum(1 for k in qa_pairs.keys() if "RECITATION_RETRY" in k)
+        retry_count = sum(1 for k in qa_pairs.keys() if "JSON_PARSE_RETRY" in k)
 
         if retry_count < 3:
-            qa_pairs[f"System_RECITATION_RETRY_{retry_count}"] = (
-                "You triggered a RECITATION safety block. DO NOT copy large files verbatim from the prompt (like plan.md or package.json). Modify whitespace, add comments, or slightly rephrase text to avoid exact matches."
+            qa_pairs[f"System_JSON_PARSE_RETRY_{retry_count}"] = (
+                "Your previous response was invalid or truncated. Ensure you return a SINGLE valid JSON object matching the requested schema. Do not include markdown code blocks or trailing text."
             )
             ctx.state["qa_pairs"] = qa_pairs
             return Event(output=qa_pairs, route="retry")
@@ -396,11 +400,11 @@ def process_phase_response(
 
     if not isinstance(response, AgentResponse):
         qa_pairs = ctx.state.get(f"{prefix}qa_pairs", {})
-        retry_count = sum(1 for k in qa_pairs.keys() if "RECITATION_RETRY" in k)
+        retry_count = sum(1 for k in qa_pairs.keys() if "JSON_PARSE_RETRY" in k)
 
         if retry_count < 3:
-            qa_pairs[f"System_RECITATION_RETRY_{retry_count}"] = (
-                "You triggered a RECITATION safety block. DO NOT copy large files verbatim from the prompt (like plan.md or package.json). Modify whitespace, add comments, or slightly rephrase text to avoid exact matches."
+            qa_pairs[f"System_JSON_PARSE_RETRY_{retry_count}"] = (
+                "Your previous response was invalid or truncated. Ensure you return a SINGLE valid JSON object matching the requested schema. Keep output concise to avoid truncation."
             )
             ctx.state[f"{prefix}qa_pairs"] = qa_pairs
             return Event(output=qa_pairs, route="retry")
