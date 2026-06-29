@@ -419,14 +419,25 @@ def validate_build_node(ctx, node_input) -> Event:
     """
     Validates the generated code by attempting to build the project.
     If the build fails, the error is routed back to the coder for fixing.
+    Includes a circuit breaker to prevent infinite loops.
     """
     build_dir = CODER_OUTPUT_DIR
+
+    build_retries = ctx.state.get("build_retries", 0)
+    if build_retries >= 3:
+        ctx.state["build_retries"] = 0
+        return Event(
+            output="Build validation failed 3 times. Skipping build validation to avoid infinite loop.",
+            route="validation_passed",
+        )
 
     if not os.path.exists(os.path.join(build_dir, "package.json")):
         return Event(
             output="No package.json found. Skipping build validation.",
             route="validation_passed",
         )
+        
+    ctx.state["build_retries"] = build_retries + 1
 
     try:
         if not os.path.exists(os.path.join(build_dir, "node_modules")):
@@ -449,6 +460,7 @@ def validate_build_node(ctx, node_input) -> Event:
             errors="replace",
             timeout=60,
         )
+        ctx.state["build_retries"] = 0
         return Event(
             output="Build validation passed successfully.", route="validation_passed"
         )
@@ -679,6 +691,13 @@ def prepare_coder_prompt(ctx, node_input):
     "Entering Coding Q&A Phase to collect your answers...",
     "Coding Phase is complete. Proceeding to Test Writing...",
 )
+
+
+def prepare_build_fix_prompt(ctx, node_input):
+    errors = ctx.state.pop("coder_pending_questions", [])
+    error_str = "\n".join(errors)
+    prompt = f"The code you generated failed to build with the following errors:\n\n{error_str}\n\nPlease fix the code and return the updated files."
+    return prompt
 
 
 def prepare_test_writer_prompt(ctx, node_input):
@@ -1047,9 +1066,17 @@ _root_agent_workflow = Workflow(
             {
                 "ask_questions": ask_coder_questions_node,
                 "retry": format_coder_update_prompt,
-                "done": prepare_test_writer_prompt,
+                "done": validate_build_node,
             },
         ),
+        (
+            validate_build_node,
+            {
+                "validation_passed": prepare_test_writer_prompt,
+                "validation_failed": prepare_build_fix_prompt,
+            },
+        ),
+        (prepare_build_fix_prompt, coder_agent),
         (ask_coder_questions_node, save_coder_answer_node),
         (
             save_coder_answer_node,
