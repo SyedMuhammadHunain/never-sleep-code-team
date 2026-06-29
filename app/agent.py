@@ -158,9 +158,12 @@ def process_agent_response(ctx, node_input) -> Event:
 
     response = parse_agent_response(node_input)
     if not isinstance(response, AgentResponse):
+        ctx.state["pending_questions"] = [
+            "The LLM failed to generate a valid response (possibly due to a RECITATION safety block). Please type 'retry' to proceed, or modify the prompt."
+        ]
         return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}",
-            route="done",
+            output=f"System Error: Expected AgentResponse, got {type(response)}. Entering Q&A fallback for retry.",
+            route="ask_questions",
         )
 
     file_messages = (
@@ -355,8 +358,12 @@ def process_phase_response(
     response = parse_agent_response(node_input)
 
     if not isinstance(response, AgentResponse):
+        ctx.state[f"{prefix}pending_questions"] = [
+            "The LLM failed to generate a valid response (possibly due to a RECITATION safety block). Please type 'retry' to proceed, or modify the prompt."
+        ]
         return Event(
-            output=f"System Error: Expected AgentResponse, got {type(response)}"
+            output=f"System Error: Expected AgentResponse, got {type(response)}. Entering Q&A fallback for retry.",
+            route="ask_questions",
         )
 
     file_messages = (
