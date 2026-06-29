@@ -1,9 +1,9 @@
 from app.app_utils.model_utils import get_gemini_model
-from google.adk.agents import LlmAgent
+from app.app_utils.base_agent import NeverSleepLlmAgent
 from app.schemas import AgentResponse
 from app.app_utils.skill_loader import load_skill_file
 
-performance_agent = LlmAgent(
+performance_agent = NeverSleepLlmAgent(
     name="performance_agent",
     model=get_gemini_model(),
     instruction=f"""You are the Performance Agent.

@@ -1,22 +1,5 @@
 from google.adk.models.google_llm import Gemini
 from google.genai import types
-from google.adk.agents import LlmAgent
-
-# Monkey patch LlmAgent to inject generate_content_config with higher temperature globally
-# to prevent RECITATION safety blocks on boilerplate code.
-original_init = LlmAgent.__init__
-
-
-def patched_init(self, *args, **kwargs):
-    if (
-        "generate_content_config" not in kwargs
-        or kwargs["generate_content_config"] is None
-    ):
-        kwargs["generate_content_config"] = types.GenerateContentConfig(temperature=0.7)
-    original_init(self, *args, **kwargs)
-
-
-LlmAgent.__init__ = patched_init
 
 
 def get_gemini_model():

@@ -1,5 +1,5 @@
 from app.app_utils.model_utils import get_gemini_model
-from google.adk.agents import LlmAgent
+from app.app_utils.base_agent import NeverSleepLlmAgent
 
 from app.app_utils.skill_loader import load_skill_file
 
@@ -18,7 +18,7 @@ def execute_shell_command(command: str) -> str:
         return f"Error executing command: {str(e)}"
 
 
-research_agent = LlmAgent(
+research_agent = NeverSleepLlmAgent(
     name="research_agent",
     model=get_gemini_model(),
     tools=[execute_shell_command],

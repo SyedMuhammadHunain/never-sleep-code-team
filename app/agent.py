@@ -6,7 +6,7 @@ from typing import List
 from app.app_utils.skill_loader import load_skill_file
 
 from google.adk.workflow import Workflow, START
-from google.adk.agents import LlmAgent
+from app.app_utils.base_agent import NeverSleepLlmAgent
 from google.adk.events import Event
 from google.adk.events.request_input import RequestInput
 from app.architecture_agent import architecture_agent
@@ -53,7 +53,7 @@ FILE_SEQUENCE = [
 ]
 
 
-requirement_agent = LlmAgent(
+requirement_agent = NeverSleepLlmAgent(
     name="requirement_agent",
     model=get_gemini_model(),
     instruction=f"""You are the Requirement Agent.
@@ -386,6 +386,44 @@ def process_phase_response(
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
+def make_phase_nodes(
+    prefix: str, output_dir: str, display_name: str, qa_msg: str, done_msg: str
+):
+    def process_response(ctx, node_input) -> Event:
+        return process_phase_response(
+            ctx, node_input, prefix, output_dir, qa_msg, done_msg
+        )
+
+    process_response.__name__ = f"process_{prefix}response"
+
+    def ask_questions(ctx, node_input):
+        return prompt_for_clarification(ctx, prefix)
+
+    ask_questions.__name__ = f"ask_{prefix}questions_node"
+
+    def save_answer(ctx, node_input):
+        return store_user_answer(ctx, node_input, prefix)
+
+    save_answer.__name__ = f"save_{prefix}answer_node"
+
+    def format_prompt(ctx, node_input):
+        if prefix == "task_planner_":
+            msg = "Instruction: Now update the task plan files with these answers.\nYou must return the full updated files in your `files_to_write` array."
+        elif prefix == "test_writer_":
+            msg = "Instruction: Now update the test files with these answers.\nYou must return the full updated files in your `files_to_write` array."
+        elif prefix == "debugger_":
+            msg = "Instruction: Now update the code with these answers.\nYou must return the full updated files in your `files_to_write` array."
+        elif prefix == "code_review_":
+            msg = "Instruction: Now update the code review feedback files with these answers.\nYou must return the full updated files in your `files_to_write` array."
+        else:
+            msg = f"Instruction: Now update the {display_name} files with these answers.\nYou must return the full updated files in your `files_to_write` array."
+        return generate_update_prompt(node_input, msg)
+
+    format_prompt.__name__ = f"format_{prefix}update_prompt"
+
+    return process_response, ask_questions, save_answer, format_prompt
+
+
 def check_implementation_loop_node(ctx, node_input):
     if ctx.state.get("is_project_complete", False):
         return Event(output=node_input, route="done")  # type: ignore
@@ -444,32 +482,18 @@ def prepare_env_setup_prompt(ctx, node_input):
     return prompt
 
 
-def process_env_setup_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "env_setup_",
-        ENV_SETUP_OUTPUT_DIR,
-        "Entering Environment Setup Q&A Phase to collect your answers...",
-        "Environment setup generation is complete. Proceeding to Coding Phase...",
-    )
-
-
-def ask_env_setup_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "env_setup_")
-
-
-def save_env_setup_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "env_setup_")
-
-
-def format_env_setup_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update mise.toml with these answers.
-You must return the full updated mise.toml file in your `files_to_write` array.
-Ensure that the mise.toml file is updated based on the new inputs from the user.""",
-    )
+(
+    process_env_setup_response,
+    ask_env_setup_questions_node,
+    save_env_setup_answer_node,
+    format_env_setup_update_prompt,
+) = make_phase_nodes(
+    "env_setup_",
+    ENV_SETUP_OUTPUT_DIR,
+    "Env Setup",
+    "Entering Environment Setup Q&A Phase to collect your answers...",
+    "Environment setup generation is complete. Proceeding to Coding Phase...",
+)
 
 
 def prepare_coder_prompt(ctx, node_input):
@@ -487,31 +511,18 @@ def prepare_coder_prompt(ctx, node_input):
     return prompt
 
 
-def process_coder_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "coder_",
-        CODER_OUTPUT_DIR,
-        "Entering Coding Q&A Phase to collect your answers...",
-        "Coding Phase is complete. Proceeding to Test Writing...",
-    )
-
-
-def ask_coder_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "coder_")
-
-
-def save_coder_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "coder_")
-
-
-def format_coder_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update the implementation files with these answers.
-You must return the full updated files in your `files_to_write` array.""",
-    )
+(
+    process_coder_response,
+    ask_coder_questions_node,
+    save_coder_answer_node,
+    format_coder_update_prompt,
+) = make_phase_nodes(
+    "coder_",
+    CODER_OUTPUT_DIR,
+    "Coder",
+    "Entering Coding Q&A Phase to collect your answers...",
+    "Coding Phase is complete. Proceeding to Test Writing...",
+)
 
 
 def prepare_test_writer_prompt(ctx, node_input):
@@ -529,31 +540,18 @@ def prepare_test_writer_prompt(ctx, node_input):
     return prompt
 
 
-def process_test_writer_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "test_writer_",
-        TEST_WRITER_OUTPUT_DIR,
-        "Entering Test Writing Q&A Phase to collect your answers...",
-        "Test Writing Phase is complete. Proceeding to Debugging...",
-    )
-
-
-def ask_test_writer_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "test_writer_")
-
-
-def save_test_writer_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "test_writer_")
-
-
-def format_test_writer_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update the test files with these answers.
-You must return the full updated files in your `files_to_write` array.""",
-    )
+(
+    process_test_writer_response,
+    ask_test_writer_questions_node,
+    save_test_writer_answer_node,
+    format_test_writer_update_prompt,
+) = make_phase_nodes(
+    "test_writer_",
+    TEST_WRITER_OUTPUT_DIR,
+    "Test Writer",
+    "Entering Test Writing Q&A Phase to collect your answers...",
+    "Test Writing Phase is complete. Proceeding to Debugging...",
+)
 
 
 def prepare_debugger_prompt(ctx, node_input):
@@ -572,31 +570,18 @@ def prepare_debugger_prompt(ctx, node_input):
     return prompt
 
 
-def process_debugger_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "debugger_",
-        DEBUGGER_OUTPUT_DIR,
-        "Entering Debugging Q&A Phase to collect your answers...",
-        "Debugging Phase is complete. Proceeding to Security Analysis...",
-    )
-
-
-def ask_debugger_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "debugger_")
-
-
-def save_debugger_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "debugger_")
-
-
-def format_debugger_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update the code with these answers.
-You must return the full updated files in your `files_to_write` array.""",
-    )
+(
+    process_debugger_response,
+    ask_debugger_questions_node,
+    save_debugger_answer_node,
+    format_debugger_update_prompt,
+) = make_phase_nodes(
+    "debugger_",
+    DEBUGGER_OUTPUT_DIR,
+    "Debugger",
+    "Entering Debugging Q&A Phase to collect your answers...",
+    "Debugging Phase is complete. Proceeding to Security Analysis...",
+)
 
 
 def prepare_security_prompt(ctx, node_input):
@@ -616,31 +601,18 @@ def prepare_security_prompt(ctx, node_input):
     return prompt
 
 
-def process_security_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "security_",
-        SECURITY_OUTPUT_DIR,
-        "Entering Security Q&A Phase to collect your answers...",
-        "Security Phase is complete. Proceeding to Performance Analysis...",
-    )
-
-
-def ask_security_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "security_")
-
-
-def save_security_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "security_")
-
-
-def format_security_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update the security documents with these answers.
-You must return the full updated files in your `files_to_write` array.""",
-    )
+(
+    process_security_response,
+    ask_security_questions_node,
+    save_security_answer_node,
+    format_security_update_prompt,
+) = make_phase_nodes(
+    "security_",
+    SECURITY_OUTPUT_DIR,
+    "Security",
+    "Entering Security Q&A Phase to collect your answers...",
+    "Security Phase is complete. Proceeding to Performance Analysis...",
+)
 
 
 def prepare_performance_prompt(ctx, node_input):
@@ -661,31 +633,18 @@ def prepare_performance_prompt(ctx, node_input):
     return prompt
 
 
-def process_performance_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "performance_",
-        PERFORMANCE_OUTPUT_DIR,
-        "Entering Performance Q&A Phase to collect your answers...",
-        "Performance Phase is complete. Proceeding to Code Review...",
-    )
-
-
-def ask_performance_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "performance_")
-
-
-def save_performance_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "performance_")
-
-
-def format_performance_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update the performance documents with these answers.
-You must return the full updated files in your `files_to_write` array.""",
-    )
+(
+    process_performance_response,
+    ask_performance_questions_node,
+    save_performance_answer_node,
+    format_performance_update_prompt,
+) = make_phase_nodes(
+    "performance_",
+    PERFORMANCE_OUTPUT_DIR,
+    "Performance",
+    "Entering Performance Q&A Phase to collect your answers...",
+    "Performance Phase is complete. Proceeding to Code Review...",
+)
 
 
 def prepare_code_review_prompt(ctx, node_input):
@@ -707,31 +666,18 @@ def prepare_code_review_prompt(ctx, node_input):
     return prompt
 
 
-def process_code_review_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "code_review_",
-        CODE_REVIEW_OUTPUT_DIR,
-        "Entering Code Review Q&A Phase to collect your answers...",
-        "Code Review Phase is complete. Workflow finished!",
-    )
-
-
-def ask_code_review_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "code_review_")
-
-
-def save_code_review_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "code_review_")
-
-
-def format_code_review_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        """Instruction: Now update the code review documents with these answers.
-You must return the full updated files in your `files_to_write` array.""",
-    )
+(
+    process_code_review_response,
+    ask_code_review_questions_node,
+    save_code_review_answer_node,
+    format_code_review_update_prompt,
+) = make_phase_nodes(
+    "code_review_",
+    CODE_REVIEW_OUTPUT_DIR,
+    "Code Review",
+    "Entering Code Review Q&A Phase to collect your answers...",
+    "Code Review Phase is complete. Workflow finished!",
+)
 
 
 def prepare_cicd_prompt(ctx, node_input):
@@ -754,30 +700,18 @@ def prepare_cicd_prompt(ctx, node_input):
     return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform CI/CD tasks based on your system instructions. Output the created/updated files."
 
 
-def process_cicd_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "cicd_",
-        CICD_OUTPUT_DIR,
-        "Entering CI/CD Q&A Phase to collect your answers...",
-        "CI/CD Phase is complete. Proceeding to next phase...",
-    )
-
-
-def ask_cicd_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "cicd_")
-
-
-def save_cicd_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "cicd_")
-
-
-def format_cicd_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        "Instruction: Now update the CI/CD files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
-    )
+(
+    process_cicd_response,
+    ask_cicd_questions_node,
+    save_cicd_answer_node,
+    format_cicd_update_prompt,
+) = make_phase_nodes(
+    "cicd_",
+    CICD_OUTPUT_DIR,
+    "Cicd",
+    "Entering CI/CD Q&A Phase to collect your answers...",
+    "CI/CD Phase is complete. Proceeding to next phase...",
+)
 
 
 def prepare_notifier_prompt(ctx, node_input):
@@ -800,30 +734,18 @@ def prepare_notifier_prompt(ctx, node_input):
     return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform Notifier tasks based on your system instructions. Output the created/updated files."
 
 
-def process_notifier_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "notifier_",
-        NOTIFIER_OUTPUT_DIR,
-        "Entering Notifier Q&A Phase to collect your answers...",
-        "Notifier Phase is complete. Proceeding to next phase...",
-    )
-
-
-def ask_notifier_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "notifier_")
-
-
-def save_notifier_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "notifier_")
-
-
-def format_notifier_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        "Instruction: Now update the Notifier files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
-    )
+(
+    process_notifier_response,
+    ask_notifier_questions_node,
+    save_notifier_answer_node,
+    format_notifier_update_prompt,
+) = make_phase_nodes(
+    "notifier_",
+    NOTIFIER_OUTPUT_DIR,
+    "Notifier",
+    "Entering Notifier Q&A Phase to collect your answers...",
+    "Notifier Phase is complete. Proceeding to next phase...",
+)
 
 
 def prepare_monitoring_prompt(ctx, node_input):
@@ -846,30 +768,18 @@ def prepare_monitoring_prompt(ctx, node_input):
     return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform Monitoring tasks based on your system instructions. Output the created/updated files."
 
 
-def process_monitoring_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "monitoring_",
-        MONITORING_OUTPUT_DIR,
-        "Entering Monitoring Q&A Phase to collect your answers...",
-        "Monitoring Phase is complete. Proceeding to next phase...",
-    )
-
-
-def ask_monitoring_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "monitoring_")
-
-
-def save_monitoring_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "monitoring_")
-
-
-def format_monitoring_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        "Instruction: Now update the Monitoring files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
-    )
+(
+    process_monitoring_response,
+    ask_monitoring_questions_node,
+    save_monitoring_answer_node,
+    format_monitoring_update_prompt,
+) = make_phase_nodes(
+    "monitoring_",
+    MONITORING_OUTPUT_DIR,
+    "Monitoring",
+    "Entering Monitoring Q&A Phase to collect your answers...",
+    "Monitoring Phase is complete. Proceeding to next phase...",
+)
 
 
 def prepare_research_prompt(ctx, node_input):
@@ -892,30 +802,18 @@ def prepare_research_prompt(ctx, node_input):
     return f"Based on the project files:\n\n{file_contents}\n\nInstruction: Please perform Research tasks based on your system instructions. Output the created/updated files."
 
 
-def process_research_response(ctx, node_input) -> Event:
-    return process_phase_response(
-        ctx,
-        node_input,
-        "research_",
-        RESEARCH_OUTPUT_DIR,
-        "Entering Research Q&A Phase to collect your answers...",
-        "Research Phase is complete. Proceeding to next phase...",
-    )
-
-
-def ask_research_questions_node(ctx, node_input):
-    return prompt_for_clarification(ctx, "research_")
-
-
-def save_research_answer_node(ctx, node_input):
-    return store_user_answer(ctx, node_input, "research_")
-
-
-def format_research_update_prompt(ctx, node_input):
-    return generate_update_prompt(
-        node_input,
-        "Instruction: Now update the Research files with these answers.\nYou must return the full updated files in your `files_to_write` array.",
-    )
+(
+    process_research_response,
+    ask_research_questions_node,
+    save_research_answer_node,
+    format_research_update_prompt,
+) = make_phase_nodes(
+    "research_",
+    RESEARCH_OUTPUT_DIR,
+    "Research",
+    "Entering Research Q&A Phase to collect your answers...",
+    "Research Phase is complete. Proceeding to next phase...",
+)
 
 
 def end_workflow_node(ctx, node_input):
