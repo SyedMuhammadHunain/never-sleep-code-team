@@ -23,6 +23,6 @@ def load_skill_file(skill_name: str, default_text: str = "") -> str:
             "The agent cannot function without this skill."
         )
 
-    with open(skill_path, "r") as skill_file:
+    with open(skill_path, "r", encoding="utf-8", errors="replace") as skill_file:
         content = skill_file.read()
         return content.replace("{", "[").replace("}", "]")

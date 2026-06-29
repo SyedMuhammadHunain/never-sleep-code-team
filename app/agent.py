@@ -128,7 +128,7 @@ def save_generated_files(
     for file_obj in files_to_write:
         file_path = os.path.join(output_dir, file_obj.filename)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "w") as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             file.write(file_obj.content)
         messages.append(f"Successfully created/updated: `{file_path}`")
 
@@ -249,21 +249,29 @@ def read_generated_documents(extra_output_dirs: List[str]) -> str:
     for filename in FILE_SEQUENCE:
         filepath = os.path.join(REQ_OUTPUT_DIR, filename)
         if os.path.exists(filepath):
-            with open(filepath, "r") as f:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 planning_docs += f"--- {filename} ---\n{f.read()}\n\n"
 
     for directory in extra_output_dirs:
         if directory == ARCH_OUTPUT_DIR:
             arch_filepath = os.path.join(ARCH_OUTPUT_DIR, "Architecture.md")
             if os.path.exists(arch_filepath):
-                with open(arch_filepath, "r") as f:
+                with open(arch_filepath, "r", encoding="utf-8", errors="replace") as f:
                     planning_docs += f"--- Architecture.md ---\n{f.read()}\n\n"
         elif os.path.exists(directory):
-            for root, _, files in os.walk(directory):
+            for root, dirs, files in os.walk(directory):
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if d
+                    not in ("node_modules", ".git", ".adk", "dist", "build", "coverage")
+                ]
                 for filename in files:
                     filepath = os.path.join(root, filename)
                     if os.path.isfile(filepath):
-                        with open(filepath, "r") as f:
+                        with open(
+                            filepath, "r", encoding="utf-8", errors="replace"
+                        ) as f:
                             rel_path = os.path.relpath(filepath, directory)
                             planning_docs += (
                                 f"--- {directory}/{rel_path} ---\n{f.read()}\n\n"
