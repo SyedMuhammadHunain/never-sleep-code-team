@@ -14,6 +14,10 @@ You are part of an automated workflow loop.
 </SKILL_DOCUMENT>
 
 <SKILL_DOCUMENT>
+{load_skill_file("software-architecture", "You are the Coder Agent. Enforce clean architecture patterns.")}
+</SKILL_DOCUMENT>
+
+<SKILL_DOCUMENT>
 {load_skill_file("conductor-implement", "You are the Coder Agent. Apply TDD best practices.")}
 </SKILL_DOCUMENT>
 
