@@ -436,7 +436,7 @@ def validate_build_node(ctx, node_input) -> Event:
             output="No package.json found. Skipping build validation.",
             route="validation_passed",
         )
-        
+
     ctx.state["build_retries"] = build_retries + 1
 
     try:
@@ -694,7 +694,8 @@ def prepare_coder_prompt(ctx, node_input):
 
 
 def prepare_build_fix_prompt(ctx, node_input):
-    errors = ctx.state.pop("coder_pending_questions", [])
+    errors = ctx.state.get("coder_pending_questions", [])
+    ctx.state["coder_pending_questions"] = []
     error_str = "\n".join(errors)
     prompt = f"The code you generated failed to build with the following errors:\n\n{error_str}\n\nPlease fix the code and return the updated files."
     return prompt
