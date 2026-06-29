@@ -408,6 +408,7 @@ def validate_build_node(ctx, node_input) -> Event:
                 check=True,
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=60,
             )
 
@@ -417,6 +418,7 @@ def validate_build_node(ctx, node_input) -> Event:
             check=True,
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=60,
         )
         return Event(
@@ -465,6 +467,7 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
                 check=True,
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=120,
             )
             subprocess.run(
@@ -473,6 +476,7 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
                 check=True,
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=300,
             )
 
@@ -483,6 +487,7 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
             check=True,
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=120,
         )
         return Event(
