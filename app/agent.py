@@ -131,6 +131,9 @@ def save_generated_files(
 
     for file_obj in files_to_write:
         file_path = os.path.join(output_dir, file_obj.filename)
+        if not os.path.abspath(file_path).startswith(os.path.abspath(output_dir)):
+            messages.append(f"Security: Blocked path traversal attempt in `{file_obj.filename}`")
+            continue
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(file_obj.content)
@@ -464,7 +467,7 @@ def validate_build_node(ctx, node_input) -> Event:
     try:
         if not os.path.exists(os.path.join(build_dir, "node_modules")):
             subprocess.run(
-                ["npm", "install"],
+                ["npm", "install", "--ignore-scripts"],
                 cwd=build_dir,
                 check=True,
                 capture_output=True,
@@ -487,7 +490,8 @@ def validate_build_node(ctx, node_input) -> Event:
             output="Build validation passed successfully.", route="validation_passed"
         )
     except subprocess.CalledProcessError as e:
-        error_msg = f"Build failed with the following error:\\n{e.stderr}\\n\\nPlease fix the code to resolve these build errors."
+        sanitized_stderr = str(e.stderr).replace(os.path.expanduser('~'), '/[REDACTED_USER_PATH]')
+        error_msg = f"Build failed with the following error:\\n{sanitized_stderr}\\n\\nPlease fix the code to resolve these build errors."
 
         if "coder_pending_questions" not in ctx.state:
             ctx.state["coder_pending_questions"] = []
@@ -524,7 +528,7 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
     try:
         if not os.path.exists(os.path.join(build_dir, "node_modules", "@playwright")):
             subprocess.run(
-                ["npm", "install", "-D", "@playwright/test"],
+                ["npm", "install", "-D", "@playwright/test", "--ignore-scripts"],
                 cwd=build_dir,
                 check=True,
                 capture_output=True,
@@ -556,7 +560,9 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
             output="Playwright tests passed successfully.", route="tests_passed"
         )
     except subprocess.CalledProcessError as e:
-        error_msg = f"Playwright tests failed with the following error:\\n{e.stdout}\\n{e.stderr}\\n\\nPlease fix the frontend logic or tests to resolve these failures."
+        sanitized_stdout = str(e.stdout).replace(os.path.expanduser('~'), '/[REDACTED_USER_PATH]')
+        sanitized_stderr = str(e.stderr).replace(os.path.expanduser('~'), '/[REDACTED_USER_PATH]')
+        error_msg = f"Playwright tests failed with the following error:\\n{sanitized_stdout}\\n{sanitized_stderr}\\n\\nPlease fix the frontend logic or tests to resolve these failures."
 
         if "coder_pending_questions" not in ctx.state:
             ctx.state["coder_pending_questions"] = []
@@ -615,7 +621,10 @@ def make_phase_nodes(
 
 
 def check_implementation_loop_node(ctx, node_input):
-    if ctx.state.get("is_project_complete", False):
+    loop_count = ctx.state.get("implementation_loop_count", 0)
+    ctx.state["implementation_loop_count"] = loop_count + 1
+
+    if ctx.state.get("is_project_complete", False) or loop_count >= 10:
         return Event(output=node_input, route="done")  # type: ignore
     else:
         return Event(

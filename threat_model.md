@@ -33,6 +33,6 @@
 - **Mitigation:** Implement a hard cap on the total number of workflow iterations or task loops across the entire execution graph.
 
 ### Elevation of Privilege
-- **Threat:** The workflow agents have the implicit privilege to write to the local filesystem and execute arbitrary code via the validation steps. 
+- **Threat:** The workflow agents have the implicit privilege to write to the local filesystem and execute arbitrary code via the validation steps.
 - **Impact:** If an agent is manipulated via prompt injection, it could write files outside of `Output/` (e.g., using path traversal `../`) in `save_generated_files` and execute arbitrary scripts.
 - **Mitigation:** Restrict `os.path.join` in `save_generated_files` by verifying that the resulting path is strictly within the intended `output_dir` (preventing path traversal). Sandbox all executions.
