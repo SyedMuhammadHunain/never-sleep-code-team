@@ -2,10 +2,12 @@
   <div class="canvas-viewport" #canvasContainer (wheel)="onWheel($event)" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)" (mouseup)="onMouseUp()" (mouseleave)="onMouseLeave()">
     <div class="canvas-layer" [style.transform]="transformStyle()">
       @for (node of nodes(); track node.id) {
-        <div class="node" [style.left.px]="node.x" [style.top.px]="node.y">
-          <div class="node-header">{{ node.title }}</div>
-          <div class="node-body">ID: {{ node.id }}</div>
-        </div>
+        <mat-card class="node" [style.left.px]="node.x" [style.top.px]="node.y" style="width: 200px; position: absolute; background: #2d2d2d; color: white;">
+          <mat-card-header style="background: #3b82f6; padding: 8px 12px;">
+            <mat-card-title style="font-size: 14px; font-weight: bold; margin: 0;">{{ node.title }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content style="padding: 12px; font-size: 12px;">ID: {{ node.id }}</mat-card-content>
+        </mat-card>
       }
     </div>
   </div>
@@ -25,10 +27,19 @@
   }
 
   <div class="bottom-prompt">
-    <div class="input-group">
-      <input type="text" [ngModel]="prompt()" (ngModelChange)="prompt.set($event)" (keydown.enter)="submitPrompt()" placeholder="Follow up with the agent..." [disabled]="loading()"/>
-      <button (click)="submitPrompt()" [disabled]="loading() || !prompt().trim()">
-        @if (loading()) { Running... } @else { Send }
+    <div class="input-group" style="display: flex; gap: 16px; align-items: center; width: 100%; max-width: 800px;">
+      <mat-form-field appearance="outline" style="flex: 1; margin-bottom: -1.25em;">
+        <mat-label>Follow up with the agent...</mat-label>
+        <input matInput type="text" [ngModel]="prompt()" (ngModelChange)="prompt.set($event)" (keydown.enter)="submitPrompt()" [disabled]="loading()">
+      </mat-form-field>
+
+      <button mat-flat-button color="primary" style="height: 56px;" (click)="submitPrompt()" [disabled]="loading() || !prompt().trim()">
+        @if (loading()) {
+          <mat-spinner diameter="20" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></mat-spinner>
+          Running...
+        } @else {
+          Send
+        }
       </button>
     </div>
   </div>

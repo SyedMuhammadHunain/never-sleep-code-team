@@ -1,15 +1,21 @@
-import { Component, ElementRef, ViewChild, signal, computed, AfterViewInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ElementRef, ViewChild, signal, computed, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatInputModule } from '@angular/material/input';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatCardModule } from '@angular/material/card';
 
 @Component({
   selector: 'app-workflow-canvas',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatInputModule, MatFormFieldModule, MatProgressSpinnerModule, MatCardModule],
   templateUrl: './workflow-canvas.html',
-  styleUrls: ['./workflow-canvas.css']
+  styleUrls: ['./workflow-canvas.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WorkflowCanvas implements AfterViewInit {
   @ViewChild('canvasContainer') canvasContainer!: ElementRef;
