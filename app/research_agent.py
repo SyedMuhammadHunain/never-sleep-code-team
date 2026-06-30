@@ -7,10 +7,12 @@ from app.app_utils.skill_loader import load_skill_file
 def execute_shell_command(command: str) -> str:
     """Execute a shell command such as agent-reach, curl, or gh to perform internet research."""
     import subprocess
+    import shlex
 
     try:
+        args = shlex.split(command)
         return subprocess.check_output(
-            command, shell=True, text=True, stderr=subprocess.STDOUT
+            args, shell=False, text=True, stderr=subprocess.STDOUT
         )
     except subprocess.CalledProcessError as e:
         return f"Command failed with exit code {e.returncode}:\n{e.output}"
