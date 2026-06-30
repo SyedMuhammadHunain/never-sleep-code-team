@@ -13,18 +13,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class PromptRequest(BaseModel):
     prompt: str
+
 
 @app.post("/api/run")
 def run_agent(request: PromptRequest):
     result = subprocess.run(
         ["uv", "run", "agents-cli", "run", request.prompt],
         capture_output=True,
-        text=True
+        text=True,
     )
     return {"output": result.stdout, "error": result.stderr}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,0 +1,35 @@
+<div class="canvas-page">
+  <div class="canvas-viewport" #canvasContainer (wheel)="onWheel($event)" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)" (mouseup)="onMouseUp()" (mouseleave)="onMouseLeave()">
+    <div class="canvas-layer" [style.transform]="transformStyle()">
+      @for (node of nodes(); track node.id) {
+        <div class="node" [style.left.px]="node.x" [style.top.px]="node.y">
+          <div class="node-header">{{ node.title }}</div>
+          <div class="node-body">ID: {{ node.id }}</div>
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (output() || error()) {
+    <div class="status-panel">
+      @if (error()) {
+        <div class="error-box"><pre>{{ error() }}</pre></div>
+      }
+      @if (output()) {
+        <div class="output-box">
+          <h3>Agent Output:</h3>
+          <pre>{{ output() }}</pre>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="bottom-prompt">
+    <div class="input-group">
+      <input type="text" [ngModel]="prompt()" (ngModelChange)="prompt.set($event)" (keydown.enter)="submitPrompt()" placeholder="Follow up with the agent..." [disabled]="loading()"/>
+      <button (click)="submitPrompt()" [disabled]="loading() || !prompt().trim()">
+        @if (loading()) { Running... } @else { Send }
+      </button>
+    </div>
+  </div>
+</div>

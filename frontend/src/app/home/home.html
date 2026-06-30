@@ -1,0 +1,19 @@
+<main class="container">
+  <div class="prompt-box" style="margin-top: 20vh; text-align: center;">
+    <h1>Never Sleep Code Team</h1>
+    <p>Enter your prompt to start the agent.</p>
+
+    <div class="input-group">
+      <input
+        type="text"
+        [ngModel]="prompt()"
+        (ngModelChange)="prompt.set($event)"
+        (keydown.enter)="submitPrompt()"
+        placeholder="Type a task for the agent..."
+      />
+      <button (click)="submitPrompt()" [disabled]="!prompt().trim()">
+        Send
+      </button>
+    </div>
+  </div>
+</main>

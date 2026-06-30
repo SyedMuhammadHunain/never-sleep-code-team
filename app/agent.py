@@ -81,13 +81,26 @@ def store_task_node(ctx, node_input):
     return node_input
 
 
+def extract_json_data(text: str) -> dict | None:
+    """Extracts JSON object from a text string that may contain markdown."""
+    try:
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0]
+        return json.loads(text)
+    except Exception as e:
+        print(f"JSON Parse Error: {e}")
+        return None
+
+
 def parse_agent_response(node_input) -> AgentResponse:
     if isinstance(node_input, dict):
         return AgentResponse(**node_input)
-    if hasattr(node_input, "output") and isinstance(node_input.output, dict):
-        return AgentResponse(**node_input.output)
-    if hasattr(node_input, "output") and isinstance(node_input.output, AgentResponse):
-        return node_input.output
+    if hasattr(node_input, "output"):
+        if isinstance(node_input.output, dict):
+            return AgentResponse(**node_input.output)
+        if isinstance(node_input.output, AgentResponse):
+            return node_input.output
+
     text_to_parse = None
     if isinstance(node_input, str):
         text_to_parse = node_input
@@ -95,14 +108,10 @@ def parse_agent_response(node_input) -> AgentResponse:
         text_to_parse = node_input.output
 
     if text_to_parse:
-        try:
-            if "```json" in text_to_parse:
-                text_to_parse = text_to_parse.split("```json")[1].split("```")[0]
-            data = json.loads(text_to_parse)
+        data = extract_json_data(text_to_parse)
+        if data:
             return AgentResponse(**data)
-        except Exception as e:
-            print(f"JSON Parse Error (text_to_parse): {e}")
-            pass
+
     if (
         hasattr(node_input, "content")
         and node_input.content
@@ -110,15 +119,10 @@ def parse_agent_response(node_input) -> AgentResponse:
     ):
         for part in node_input.content.parts:
             if hasattr(part, "text") and part.text:
-                try:
-                    text = part.text
-                    if "```json" in text:
-                        text = text.split("```json")[1].split("```")[0]
-                    data = json.loads(text)
+                data = extract_json_data(part.text)
+                if data:
                     return AgentResponse(**data)
-                except Exception as e:
-                    print(f"JSON Parse Error (part text): {e}")
-                    pass
+
     return node_input
 
 
@@ -132,7 +136,9 @@ def save_generated_files(
     for file_obj in files_to_write:
         file_path = os.path.join(output_dir, file_obj.filename)
         if not os.path.abspath(file_path).startswith(os.path.abspath(output_dir)):
-            messages.append(f"Security: Blocked path traversal attempt in `{file_obj.filename}`")
+            messages.append(
+                f"Security: Blocked path traversal attempt in `{file_obj.filename}`"
+            )
             continue
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as file:
@@ -440,6 +446,43 @@ def process_phase_response(
     return Event(output="\n".join(status_messages), route="done")  # type: ignore
 
 
+def install_npm_dependencies_if_needed(build_dir: str):
+    """Installs npm dependencies if node_modules does not exist."""
+    if not os.path.exists(os.path.join(build_dir, "node_modules")):
+        subprocess.run(
+            ["npm", "install", "--ignore-scripts"],
+            cwd=build_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=60,
+        )
+
+
+def install_playwright_if_needed(build_dir: str):
+    """Installs Playwright test runner and dependencies if not already installed."""
+    if not os.path.exists(os.path.join(build_dir, "node_modules", "@playwright")):
+        subprocess.run(
+            ["npm", "install", "-D", "@playwright/test", "--ignore-scripts"],
+            cwd=build_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=120,
+        )
+        subprocess.run(
+            ["npx", "playwright", "install", "--with-deps"],
+            cwd=build_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=300,
+        )
+
+
 def validate_build_node(ctx, node_input) -> Event:
     """
     Validates the generated code by attempting to build the project.
@@ -465,16 +508,7 @@ def validate_build_node(ctx, node_input) -> Event:
     ctx.state["build_retries"] = build_retries + 1
 
     try:
-        if not os.path.exists(os.path.join(build_dir, "node_modules")):
-            subprocess.run(
-                ["npm", "install", "--ignore-scripts"],
-                cwd=build_dir,
-                check=True,
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=60,
-            )
+        install_npm_dependencies_if_needed(build_dir)
 
         subprocess.run(
             ["npm", "run", "build"],
@@ -490,7 +524,9 @@ def validate_build_node(ctx, node_input) -> Event:
             output="Build validation passed successfully.", route="validation_passed"
         )
     except subprocess.CalledProcessError as e:
-        sanitized_stderr = str(e.stderr).replace(os.path.expanduser('~'), '/[REDACTED_USER_PATH]')
+        sanitized_stderr = str(e.stderr).replace(
+            os.path.expanduser("~"), "/[REDACTED_USER_PATH]"
+        )
         error_msg = f"Build failed with the following error:\\n{sanitized_stderr}\\n\\nPlease fix the code to resolve these build errors."
 
         if "coder_pending_questions" not in ctx.state:
@@ -526,25 +562,7 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
         )
 
     try:
-        if not os.path.exists(os.path.join(build_dir, "node_modules", "@playwright")):
-            subprocess.run(
-                ["npm", "install", "-D", "@playwright/test", "--ignore-scripts"],
-                cwd=build_dir,
-                check=True,
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=120,
-            )
-            subprocess.run(
-                ["npx", "playwright", "install", "--with-deps"],
-                cwd=build_dir,
-                check=True,
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=300,
-            )
+        install_playwright_if_needed(build_dir)
 
         test_path = os.path.abspath(tests_dir)
         subprocess.run(
@@ -560,8 +578,12 @@ def run_playwright_tests_node(ctx, node_input) -> Event:
             output="Playwright tests passed successfully.", route="tests_passed"
         )
     except subprocess.CalledProcessError as e:
-        sanitized_stdout = str(e.stdout).replace(os.path.expanduser('~'), '/[REDACTED_USER_PATH]')
-        sanitized_stderr = str(e.stderr).replace(os.path.expanduser('~'), '/[REDACTED_USER_PATH]')
+        sanitized_stdout = str(e.stdout).replace(
+            os.path.expanduser("~"), "/[REDACTED_USER_PATH]"
+        )
+        sanitized_stderr = str(e.stderr).replace(
+            os.path.expanduser("~"), "/[REDACTED_USER_PATH]"
+        )
         error_msg = f"Playwright tests failed with the following error:\\n{sanitized_stdout}\\n{sanitized_stderr}\\n\\nPlease fix the frontend logic or tests to resolve these failures."
 
         if "coder_pending_questions" not in ctx.state:
