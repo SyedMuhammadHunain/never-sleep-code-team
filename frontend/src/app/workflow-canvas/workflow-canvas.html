@@ -1,41 +1,54 @@
 <div class="canvas-page">
-  <div class="canvas-viewport" #canvasContainer (wheel)="onWheel($event)" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)" (mouseup)="onMouseUp()" (mouseleave)="onMouseLeave()">
-    <div class="canvas-layer" [style.transform]="transformStyle()">
-      @for (node of nodes(); track node.id) {
-        <mat-card class="node" [style.left.px]="node.x" [style.top.px]="node.y" style="width: 200px; position: absolute; background: #2d2d2d; color: white;">
-          <mat-card-header style="background: #3b82f6; padding: 8px 12px;">
-            <mat-card-title style="font-size: 14px; font-weight: bold; margin: 0;">{{ node.title }}</mat-card-title>
-          </mat-card-header>
-          <mat-card-content style="padding: 12px; font-size: 12px;">ID: {{ node.id }}</mat-card-content>
-        </mat-card>
-      }
-    </div>
+  <div class="canvas-viewport">
+    <vflow [nodes]="nodes()" [edges]="edges()" background="transparent">
+      <ng-template nodeHtml let-ctx>
+        <div class="node-container" style="position: relative; width: 100%; height: 100%;">
+          <mat-card class="node-card" style="width: 100%; height: 100%; box-sizing: border-box; margin: 0; padding: 0;">
+            <mat-card-header class="node-header">
+              <mat-card-title>{{ $any(ctx.node.data)()?.title }}</mat-card-title>
+            </mat-card-header>
+            <mat-card-content class="node-content">
+              ID: {{ ctx.node.id }}
+            </mat-card-content>
+          </mat-card>
+          <!-- Handles placed at the node container level -->
+          <handle [type]="'source'" [position]="'bottom'"></handle>
+          <handle [type]="'target'" [position]="'top'"></handle>
+        </div>
+      </ng-template>
+    </vflow>
   </div>
 
-  @if (output() || error()) {
-    <div class="status-panel">
-      @if (error()) {
-        <div class="error-box"><pre>{{ error() }}</pre></div>
-      }
-      @if (output()) {
-        <div class="output-box">
-          <h3>Agent Output:</h3>
-          <pre>{{ output() }}</pre>
-        </div>
-      }
-    </div>
-  }
+  <div class="status-panel">
+    @if (error()) {
+      <div class="error-banner">
+        <strong>Error:</strong> {{ error() }}
+      </div>
+    }
+
+    @if (loading() && !output() && !error()) {
+      <div class="loading-state">
+        <mat-spinner diameter="40"></mat-spinner>
+        <p>Processing workflow...</p>
+      </div>
+    } @else if (output()) {
+      <div class="output-box">
+        <h3>Agent Output:</h3>
+        <pre>{{ output() }}</pre>
+      </div>
+    }
+  </div>
 
   <div class="bottom-prompt">
-    <div class="input-group" style="display: flex; gap: 16px; align-items: center; width: 100%; max-width: 800px;">
-      <mat-form-field appearance="outline" style="flex: 1; margin-bottom: -1.25em;">
+    <div class="input-group">
+      <mat-form-field appearance="outline" class="prompt-input">
         <mat-label>Follow up with the agent...</mat-label>
         <input matInput type="text" [ngModel]="prompt()" (ngModelChange)="prompt.set($event)" (keydown.enter)="submitPrompt()" [disabled]="loading()">
       </mat-form-field>
 
-      <button mat-flat-button color="primary" style="height: 56px;" (click)="submitPrompt()" [disabled]="loading() || !prompt().trim()">
+      <button mat-flat-button color="primary" class="submit-button" (click)="submitPrompt()" [disabled]="loading() || !prompt().trim()">
         @if (loading()) {
-          <mat-spinner diameter="20" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></mat-spinner>
+          <mat-spinner diameter="20" class="btn-spinner"></mat-spinner>
           Running...
         } @else {
           Send
