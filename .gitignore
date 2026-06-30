@@ -10,3 +10,13 @@ planning_docs/
 artifacts/
 debug_runner.py
 Output/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
+
+# IDE
+.vscode/
+.idea/

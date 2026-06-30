@@ -6,13 +6,9 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "never-sleep-code-team-ui": {
+    "never-sleep-code-team-frontend": {
       "projectType": "application",
-      "schematics": {
-        "@schematics/angular:component": {
-          "style": "scss"
-        }
-      },
+      "schematics": {},
       "root": "",
       "sourceRoot": "src",
       "prefix": "app",
@@ -22,7 +18,6 @@
           "options": {
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
-            "inlineStyleLanguage": "scss",
             "assets": [
               {
                 "glob": "**/*",
@@ -30,16 +25,8 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
-            ],
-            "server": "src/main.server.ts",
-            "outputMode": "server",
-            "security": {
-              "allowedHosts": []
-            },
-            "ssr": {
-              "entry": "src/server.ts"
-            }
+              "src/styles.css"
+            ]
           },
           "configurations": {
             "production": {
@@ -69,10 +56,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "never-sleep-code-team-ui:build:production"
+              "buildTarget": "never-sleep-code-team-frontend:build:production"
             },
             "development": {
-              "buildTarget": "never-sleep-code-team-ui:build:development"
+              "buildTarget": "never-sleep-code-team-frontend:build:development"
             }
           },
           "defaultConfiguration": "development"

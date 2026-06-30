@@ -8,29 +8,29 @@
 ## 2. STRIDE Evaluation
 
 ### Spoofing
-- **Threat:** Caller identity boundaries are not verified when accepting the `original_task` or answering clarifying questions.
-- **Impact:** Any user or process interacting with the workflow can impersonate legitimate users and trigger expensive agent operations.
-- **Mitigation:** Implement authentication/authorization before kicking off the `_root_agent_workflow` or when continuing via `RequestInput`.
+- **Threat:** Caller identity boundaries are not verified when accepting the `original_task` or answering clarifying questions. Additionally, the new FastAPI server exposes `/api/run` without any authentication or API keys.
+- **Impact:** Any user or process interacting with the workflow (or network) can impersonate legitimate users and trigger expensive agent operations.
+- **Mitigation:** Implement authentication/authorization (e.g., API keys, OAuth) before kicking off workflows or accepting requests on the FastAPI server.
 
 ### Tampering
-- **Threat:** The workflow uses `subprocess.run(["npm", "install"])` inside `CODER_OUTPUT_DIR`. An attacker or compromised agent could generate malicious `package.json` with dangerous post-install scripts.
-- **Impact:** Remote Code Execution (RCE) on the host machine running the workflow.
-- **Mitigation:** Sandbox the build validation step (e.g., using Docker containers) and disable lifecycle scripts during `npm install` (`--ignore-scripts`).
+- **Threat:** The workflow uses `subprocess.run(["npm", "install"])` inside `CODER_OUTPUT_DIR`. An attacker or compromised agent could generate malicious `package.json` with dangerous post-install scripts. Furthermore, user input from the Angular frontend is passed directly to `agents-cli run` (Prompt Injection).
+- **Impact:** Remote Code Execution (RCE) on the host machine running the workflow, or agents being manipulated into executing harmful tool calls.
+- **Mitigation:** Sandbox the build validation step (e.g., using Docker containers) and disable lifecycle scripts (`--ignore-scripts`). Rely on the `.agents/scripts/validate_tool_call.py` hook to block destructive commands from prompt injection.
 
 ### Repudiation
-- **Threat:** There is limited secure logging of critical transactions (e.g. which agent generated which exact shell command or file).
+- **Threat:** There is limited secure logging of critical transactions (e.g. which agent generated which exact shell command or file). The FastAPI server also lacks request logging with client IPs.
 - **Impact:** Difficult to audit if an agent goes rogue or if a malicious prompt injection causes the system to run harmful commands.
-- **Mitigation:** Implement structured, append-only audit logging for all `subprocess.run` executions and all file writes in `save_generated_files`.
+- **Mitigation:** Implement structured, append-only audit logging for all `subprocess.run` executions, file writes, and incoming API requests.
 
 ### Information Disclosure
-- **Threat:** Error messages (`e.stderr` and `e.stdout`) from failed builds and tests are directly appended to `coder_pending_questions` and passed back to the LLM.
-- **Impact:** Raw stack traces, environment variables, or local file paths from the host system may leak into the LLM context, which might be logged or sent to an external provider (Gemini).
-- **Mitigation:** Sanitize and redact sensitive information from `stderr`/`stdout` before passing it back into the agent context.
+- **Threat:** Error messages from failed builds and tests are directly appended to `coder_pending_questions`. Additionally, the FastAPI `/api/run` endpoint returns raw `stderr` and `stdout` from the CLI.
+- **Impact:** Raw stack traces, environment variables, or local file paths from the host system may leak into the LLM context or to unauthenticated API clients.
+- **Mitigation:** Sanitize and redact sensitive information from `stderr`/`stdout` before passing it back into the agent context or the HTTP response.
 
 ### Denial of Service
-- **Threat:** While `build_retries` limits the build loop to 3 attempts, there is an overarching `check_implementation_loop_node` that loops back to `coder_agent` if `has_more_tasks` is true.
-- **Impact:** A misbehaving `coder_agent` could return `has_more_tasks = true` indefinitely, leading to an infinite loop that exhausts API quotas and local compute resources.
-- **Mitigation:** Implement a hard cap on the total number of workflow iterations or task loops across the entire execution graph.
+- **Threat:** Overarching `check_implementation_loop_node` can cause infinite loops. The FastAPI server lacks rate limiting on the `/api/run` endpoint.
+- **Impact:** A misbehaving `coder_agent` or a malicious API client can exhaust API quotas (Gemini credits) and local compute resources.
+- **Mitigation:** Implement a hard cap on the total number of workflow iterations and add rate limiting/throttling to the FastAPI server.
 
 ### Elevation of Privilege
 - **Threat:** The workflow agents have the implicit privilege to write to the local filesystem and execute arbitrary code via the validation steps.

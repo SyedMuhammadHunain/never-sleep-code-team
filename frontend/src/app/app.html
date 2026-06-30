@@ -1,0 +1,37 @@
+<main class="container">
+  <div class="prompt-box">
+    <h1>Never Sleep Code Team</h1>
+    <p>Enter your prompt to start the agent.</p>
+
+    <div class="input-group">
+      <input
+        type="text"
+        [ngModel]="prompt()"
+        (ngModelChange)="prompt.set($event)"
+        (keydown.enter)="submitPrompt()"
+        placeholder="Type a task for the agent..."
+        [disabled]="loading()"
+      />
+      <button (click)="submitPrompt()" [disabled]="loading() || !prompt().trim()">
+        @if (loading()) {
+          Running...
+        } @else {
+          Send
+        }
+      </button>
+    </div>
+
+    @if (error()) {
+      <div class="error-box">
+        <pre>{{ error() }}</pre>
+      </div>
+    }
+
+    @if (output()) {
+      <div class="output-box">
+        <h3>Agent Output:</h3>
+        <pre>{{ output() }}</pre>
+      </div>
+    }
+  </div>
+</main>
