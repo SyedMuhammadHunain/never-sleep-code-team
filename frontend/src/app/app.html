@@ -1,1 +1,27 @@
-<router-outlet></router-outlet>
+<div class="app-layout">
+  <header class="header">
+    <div class="logo">
+      <span class="logo-icon">✨</span>
+      <h1>Agent Flow</h1>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="left-panel">
+      <app-prompt (run)="onRun($event)"></app-prompt>
+
+      <div class="status-panel">
+        <h3>Execution Status</h3>
+        <p class="status-text" [class]="status().toLowerCase()">{{ status() }}</p>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      @defer (on viewport) {
+        <app-graph [nodes]="nodes()" [links]="edges()"></app-graph>
+      } @placeholder {
+        <div style="color: rgba(255,255,255,0.4); padding: 40px; text-align: center;">Loading graph visualization...</div>
+      }
+    </div>
+  </main>
+</div>
