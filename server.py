@@ -25,7 +25,44 @@ def run_agent(request: PromptRequest):
         capture_output=True,
         text=True,
     )
-    return {"output": result.stdout, "error": result.stderr}
+
+    return {
+        "output": result.stdout,
+        "error": result.stderr,
+    }
+
+@app.get("/api/workflow")
+def get_workflow():
+    from app.agent import root_agent
+    from google.adk.workflow import START
+
+    nodes_set = set()
+    edges = []
+
+    def get_node_name(node):
+        if node == START:
+            return "START"
+        return getattr(node, "name", getattr(node, "__name__", str(node)))
+
+    if hasattr(root_agent, "edges"):
+        for idx, (source, target) in enumerate(root_agent.edges):
+            source_name = get_node_name(source)
+            nodes_set.add(source_name)
+
+            if isinstance(target, dict):
+                for route, dst in target.items():
+                    dst_name = get_node_name(dst)
+                    nodes_set.add(dst_name)
+                    edges.append({"id": f"edge_{idx}_{route}", "source": source_name, "target": dst_name, "label": route})
+            else:
+                dst_name = get_node_name(target)
+                nodes_set.add(dst_name)
+                edges.append({"id": f"edge_{idx}", "source": source_name, "target": dst_name})
+
+    return {
+        "nodes": [{"id": n, "label": n} for n in nodes_set],
+        "edges": edges
+    }
 
 
 if __name__ == "__main__":
