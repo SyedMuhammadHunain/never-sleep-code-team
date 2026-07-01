@@ -1,33 +1,3 @@
-:root {
-  --spacing-1: 0.25rem; /* 4px */
-  --spacing-2: 0.5rem;  /* 8px */
-  --spacing-3: 0.75rem; /* 12px */
-  --spacing-4: 1rem;    /* 16px */
-  --spacing-6: 1.5rem;  /* 24px */
-  --spacing-8: 2rem;    /* 32px */
-
-  --color-bg-base: #0a0a0c;
-  --color-bg-surface: #141417;
-  --color-bg-surface-hover: #1f1f24;
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #a1a1aa;
-
-  --color-brand: #6366f1;
-  --color-brand-hover: #4f46e5;
-
-  --color-success: #22c55e;
-  --color-error: #ef4444;
-  --color-running: #3b82f6;
-}
-
-body {
-  margin: 0;
-  background-color: var(--color-bg-base);
-  color: var(--color-text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
 .app-layout {
   display: flex;
   flex-direction: column;
@@ -96,6 +66,8 @@ body {
   justify-content: center;
   align-items: center;
   background-color: var(--color-bg-base);
+  background-image: radial-gradient(circle at 2px 2px, var(--color-border) 1px, transparent 0);
+  background-size: 24px 24px;
 }
 
 .status-panel {

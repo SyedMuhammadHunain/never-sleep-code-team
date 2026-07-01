@@ -21,8 +21,9 @@ import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
                 [attr.width]="node.dimension.width"
                 [attr.height]="node.dimension.height"
                 [attr.fill]="getColor(node.label)"
+                [attr.stroke]="getStrokeColor(node.label)"
                 rx="6" ry="6" />
-              <svg:text alignment-baseline="central" [attr.x]="12" [attr.y]="node.dimension.height / 2" fill="var(--color-bg-base)" font-family="inherit" font-size="0.875rem" font-weight="500">
+              <svg:text alignment-baseline="central" [attr.x]="12" [attr.y]="node.dimension.height / 2" fill="var(--color-text-primary)" font-family="inherit" font-size="0.875rem" font-weight="500">
                 {{node.label}}
               </svg:text>
             </svg:g>
@@ -73,7 +74,7 @@ import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
     }
     .line { stroke: var(--color-border-focus); fill: none; opacity: 0.6; }
     .arrow-head { fill: var(--color-border-focus); opacity: 0.6; }
-    .node rect { stroke: var(--color-border); stroke-width: 1px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .node rect { stroke-width: 1px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .empty-state {
       color: var(--color-text-secondary);
       border: 2px dashed var(--color-border);
@@ -92,9 +93,14 @@ export class GraphComponent {
   @Input() links: Edge[] = [];
 
   getColor(label: string): string {
-    // Return a solid semantic color instead of bright AI aesthetic purple
-    if (label === 'user') return 'var(--color-brand-hover)';
-    if (label.includes('workflow')) return 'var(--color-brand)';
-    return 'var(--color-text-secondary)';
+    if (label === 'user') return '#e0f2fe';
+    if (label.includes('workflow')) return '#dcfce7';
+    return '#f4f4f5';
+  }
+
+  getStrokeColor(label: string): string {
+    if (label === 'user') return '#7dd3fc';
+    if (label.includes('workflow')) return '#86efac';
+    return '#d4d4d8';
   }
 }
