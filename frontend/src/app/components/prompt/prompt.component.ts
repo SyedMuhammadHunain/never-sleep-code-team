@@ -6,15 +6,17 @@ import { FormsModule } from '@angular/forms';
   imports: [FormsModule],
   template: `
     <div class="prompt-container">
+      <label for="prompt-input" class="sr-only">Graph flow prompt</label>
       <textarea
+        id="prompt-input"
         [(ngModel)]="promptText"
         placeholder="Enter your graph flow prompt here... (e.g., Generate a flow for checking emails)"
         rows="4">
       </textarea>
       <div class="actions">
-        <button (click)="onRun()" [disabled]="!promptText() || isRunning()">
+        <button (click)="onRun()" [disabled]="!promptText() || isRunning()" aria-live="polite">
           @if (isRunning()) {
-            <span class="spinner"></span> Running...
+            <span class="spinner" aria-hidden="true"></span> <span class="sr-only">Running...</span>
           } @else {
             Run Flow
           }
@@ -24,65 +26,91 @@ import { FormsModule } from '@angular/forms';
   `,
   styles: [`
     .prompt-container {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background-color: var(--color-bg-base);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
-      padding: 16px;
+      padding: var(--spacing-4);
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      gap: var(--spacing-3);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     textarea {
       width: 100%;
-      background: rgba(0, 0, 0, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background-color: var(--color-bg-surface-hover);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
-      color: #fff;
-      padding: 12px;
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
+      color: var(--color-text-primary);
+      padding: var(--spacing-3);
+      font-family: inherit;
+      font-size: 0.875rem;
       resize: vertical;
       outline: none;
-      transition: border-color 0.3s;
+      transition: border-color 0.2s ease-in-out;
+      box-sizing: border-box;
     }
+
     textarea:focus {
-      border-color: #8a2be2;
+      border-color: var(--color-brand);
     }
+
+    textarea::placeholder {
+      color: var(--color-text-secondary);
+    }
+
     .actions {
       display: flex;
       justify-content: flex-end;
     }
+
     button {
-      background: linear-gradient(135deg, #8a2be2, #4b0082);
+      background-color: var(--color-brand);
       color: white;
-      border: none;
-      padding: 10px 24px;
-      border-radius: 8px;
-      font-weight: 600;
+      border: 1px solid transparent;
+      padding: var(--spacing-2) var(--spacing-4);
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.875rem;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
-      transition: transform 0.2s, box-shadow 0.2s;
+      justify-content: center;
+      gap: var(--spacing-2);
+      transition: background-color 0.2s ease-in-out;
+      min-width: 100px;
     }
+
     button:hover:not([disabled]) {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(138, 43, 226, 0.4);
+      background-color: var(--color-brand-hover);
     }
+
     button[disabled] {
       opacity: 0.6;
       cursor: not-allowed;
     }
+
     .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-top-color: #fff;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: currentColor;
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
