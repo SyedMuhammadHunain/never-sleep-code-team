@@ -6,59 +6,21 @@
 
 .header {
   padding: var(--spacing-4) var(--spacing-6);
-  border-bottom: 1px solid var(--color-border);
-  background-color: var(--color-bg-surface);
   display: flex;
-  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 10;
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.logo h1 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--color-text-primary);
+.header-actions {
+  pointer-events: auto;
 }
 
 .main-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* Responsive layout: column on mobile, row on tablet/desktop */
-@media (min-width: 768px) {
-  .main-content {
-    flex-direction: row;
-  }
-}
-
-.left-panel {
-  width: 100%;
-  padding: var(--spacing-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-6);
-  border-bottom: 1px solid var(--color-border);
-  background-color: var(--color-bg-surface);
-}
-
-@media (min-width: 768px) {
-  .left-panel {
-    width: 350px;
-    border-right: 1px solid var(--color-border);
-    border-bottom: none;
-    overflow-y: auto;
-  }
-}
-
-.right-panel {
   flex: 1;
   position: relative;
   overflow: hidden;
@@ -69,30 +31,3 @@
   background-image: radial-gradient(circle at 2px 2px, var(--color-border) 1px, transparent 0);
   background-size: 24px 24px;
 }
-
-.status-panel {
-  background-color: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: var(--spacing-4);
-}
-
-.status-panel h3 {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  margin: 0 0 var(--spacing-2) 0;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
-}
-
-.status-text {
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin: 0;
-}
-
-.idle { color: var(--color-text-secondary); }
-.running { color: var(--color-running); }
-.completed { color: var(--color-success); }
-.failed { color: var(--color-error); }

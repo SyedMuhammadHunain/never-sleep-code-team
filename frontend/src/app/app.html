@@ -1,22 +1,17 @@
 <div class="app-layout">
+  <app-toast></app-toast>
   <header class="header" role="banner">
-    <div class="logo">
-      <span class="logo-icon" aria-hidden="true">✨</span>
-      <h1>Agent Flow</h1>
+    <div class="header-actions">
+      <app-theme-toggle></app-theme-toggle>
     </div>
   </header>
 
   <main class="main-content" role="main">
-    <div class="left-panel">
-      <app-prompt (run)="onRun($event)"></app-prompt>
+    <app-prompt (run)="onRun($event)"></app-prompt>
 
-      <div class="status-panel" aria-live="polite">
-        <h3>Execution Status</h3>
-        <p class="status-text" [class]="status().toLowerCase()">{{ status() }}</p>
-      </div>
-    </div>
-
-    <div class="right-panel" role="region" aria-label="Graph Visualization">
+    @if (status() === 'Running' && nodes().length === 0) {
+      <app-skeleton></app-skeleton>
+    } @else {
       @defer (on viewport) {
         <app-graph [nodes]="nodes()" [links]="edges()"></app-graph>
       } @placeholder {
@@ -24,6 +19,6 @@
           Loading graph visualization...
         </div>
       }
-    </div>
+    }
   </main>
 </div>

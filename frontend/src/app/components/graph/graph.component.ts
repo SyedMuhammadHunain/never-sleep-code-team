@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
 
 @Component({
@@ -17,15 +17,23 @@ import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
 
           <ng-template #nodeTemplate let-node>
             <svg:g class="node">
-              <svg:rect
-                [attr.width]="node.dimension.width"
-                [attr.height]="node.dimension.height"
-                [attr.fill]="getColor(node.label)"
-                [attr.stroke]="getStrokeColor(node.label)"
-                rx="6" ry="6" />
-              <svg:text alignment-baseline="central" [attr.x]="12" [attr.y]="node.dimension.height / 2" fill="var(--color-text-primary)" font-family="inherit" font-size="0.875rem" font-weight="500">
-                {{node.label}}
-              </svg:text>
+              <svg:foreignObject
+                [attr.width]="node.dimension.width + 8"
+                [attr.height]="node.dimension.height + 8"
+                [attr.x]="-4" [attr.y]="-4">
+                <div xmlns="http://www.w3.org/1999/xhtml"
+                     [class.active-node-wrapper]="node.data?.active"
+                     [style.width.px]="node.dimension.width + 8"
+                     [style.height.px]="node.dimension.height + 8"
+                     [style.padding.px]="node.data?.active ? 2 : 0">
+                  <div class="node-content-inner"
+                       [style.background-color]="getColor(node.label)"
+                       [style.border]="node.data?.active ? 'none' : '1px solid ' + getStrokeColor(node.label)"
+                       [style.box-sizing]="'border-box'">
+                    <span [style.color]="'var(--color-text-primary)'">{{node.label}}</span>
+                  </div>
+                </div>
+              </svg:foreignObject>
             </svg:g>
           </ng-template>
 
@@ -74,7 +82,7 @@ import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
     }
     .line { stroke: var(--color-border-focus); fill: none; opacity: 0.6; }
     .arrow-head { fill: var(--color-border-focus); opacity: 0.6; }
-    .node rect { stroke-width: 1px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .node-content-inner { box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .empty-state {
       color: var(--color-text-secondary);
       border: 2px dashed var(--color-border);
@@ -86,7 +94,8 @@ import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
       align-items: center;
       max-width: 320px;
     }
-  `]
+  `],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class GraphComponent {
   @Input() nodes: Node[] = [];

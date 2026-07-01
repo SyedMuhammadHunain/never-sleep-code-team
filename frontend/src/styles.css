@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 :root {
   --spacing-1: 0.25rem; /* 4px */
   --spacing-2: 0.5rem;  /* 8px */
@@ -24,6 +22,23 @@
   --color-running: #2563eb;
 }
 
+body.dark {
+  --color-bg-base: #18181b;
+  --color-bg-surface: #27272a;
+  --color-bg-surface-hover: #3f3f46;
+  --color-border: #3f3f46;
+  --color-border-focus: #818cf8;
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #a1a1aa;
+
+  --color-brand: #6366f1;
+  --color-brand-hover: #818cf8;
+
+  --color-success: #22c55e;
+  --color-error: #ef4444;
+  --color-running: #3b82f6;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -36,4 +51,58 @@ body {
   color: var(--color-text-primary);
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+@keyframes rotate-glow {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.active-node-wrapper {
+  position: relative;
+  border-radius: 8px;
+  padding: 2px;
+  background: transparent;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.active-node-wrapper::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    #ff0000,
+    #ff7f00,
+    #ffff00,
+    #00ff00,
+    #0000ff,
+    #4b0082,
+    #9400d3,
+    #ff0000
+  );
+  animation: rotate-glow 2s linear infinite;
+  z-index: 0;
+}
+
+.active-node-wrapper .node-content-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
