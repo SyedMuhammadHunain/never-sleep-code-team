@@ -1,5 +1,6 @@
-import subprocess
-from fastapi import FastAPI
+import asyncio
+import json
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -14,22 +15,50 @@ app.add_middleware(
 )
 
 
-class PromptRequest(BaseModel):
-    prompt: str
+@app.websocket("/api/ws/run")
+async def websocket_run(websocket: WebSocket):
+    await websocket.accept()
+    process = None
+    try:
+        # Initial prompt
+        data = await websocket.receive_text()
+        req = json.loads(data)
+        prompt = req.get("prompt", "")
 
+        process = await asyncio.create_subprocess_exec(
+            "uv", "run", "agents-cli", "run", prompt,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-@app.post("/api/run")
-def run_agent(request: PromptRequest):
-    result = subprocess.run(
-        ["uv", "run", "agents-cli", "run", request.prompt],
-        capture_output=True,
-        text=True,
-    )
+        async def read_stream(stream, stream_type):
+            while True:
+                chunk = await stream.read(1024)
+                if not chunk:
+                    break
+                await websocket.send_text(json.dumps({"type": stream_type, "data": chunk.decode(errors="replace")}))
 
-    return {
-        "output": result.stdout,
-        "error": result.stderr,
-    }
+        async def write_stdin():
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    msg = json.loads(data)
+                    if msg.get("type") == "input":
+                        process.stdin.write((msg.get("data", "") + "\n").encode())
+                        await process.stdin.drain()
+            except WebSocketDisconnect:
+                pass
+
+        asyncio.create_task(read_stream(process.stdout, "stdout"))
+        asyncio.create_task(read_stream(process.stderr, "stderr"))
+        asyncio.create_task(write_stdin())
+
+        await process.wait()
+        await websocket.send_text(json.dumps({"type": "done", "code": process.returncode}))
+    except WebSocketDisconnect:
+        if process and process.returncode is None:
+            process.terminate()
 
 @app.get("/api/workflow")
 def get_workflow():

@@ -7,7 +7,15 @@
   </header>
 
   <main class="main-content" role="main">
-    <app-prompt (run)="onRun($event)"></app-prompt>
+    <div class="logs-overlay" *ngIf="logs().length > 0">
+      <div class="logs-content">
+        @for (log of logs(); track $index) {
+          <span style="white-space: pre-wrap;">{{ log }}</span>
+        }
+      </div>
+    </div>
+
+    <app-prompt [isWaitingForInput]="isWaitingForInput()" (run)="onRun($event)"></app-prompt>
 
     @if (status() === 'Running' && nodes().length === 0) {
       <app-skeleton></app-skeleton>

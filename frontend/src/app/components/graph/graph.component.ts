@@ -30,7 +30,7 @@ import { NgxGraphModule, Node, Edge } from '@swimlane/ngx-graph';
                        [style.background-color]="getColor(node.label)"
                        [style.border]="node.data?.active ? 'none' : '1px solid ' + getStrokeColor(node.label)"
                        [style.box-sizing]="'border-box'">
-                    <span [style.color]="'var(--color-text-primary)'">{{node.label}}</span>
+                    <span [style.color]="'var(--color-node-text)'">{{node.label}}</span>
                   </div>
                 </div>
               </svg:foreignObject>
@@ -102,14 +102,14 @@ export class GraphComponent {
   @Input() links: Edge[] = [];
 
   getColor(label: string): string {
-    if (label === 'user') return '#e0f2fe';
-    if (label.includes('workflow')) return '#dcfce7';
-    return '#f4f4f5';
+    if (label === 'user') return 'var(--color-node-user-bg)';
+    if (label.includes('workflow')) return 'var(--color-node-workflow-bg)';
+    return 'var(--color-node-default-bg)';
   }
 
   getStrokeColor(label: string): string {
-    if (label === 'user') return '#7dd3fc';
-    if (label.includes('workflow')) return '#86efac';
-    return '#d4d4d8';
+    if (label === 'user') return 'var(--color-node-user-stroke)';
+    if (label.includes('workflow')) return 'var(--color-node-workflow-stroke)';
+    return 'var(--color-node-default-stroke)';
   }
 }

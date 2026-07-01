@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, EventEmitter, Output, Input, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -14,14 +14,20 @@ import { FormsModule } from '@angular/forms';
             id="prompt-input"
             [(ngModel)]="promptText"
             (keyup.enter)="onRun()"
-            placeholder="Enter your graph flow prompt here... (e.g., Generate a flow for checking emails)"
+            [placeholder]="isWaitingForInput ? 'Type your answer here...' : 'Enter your graph flow prompt here... (e.g., Generate a flow for checking emails)'"
             autocomplete="off"
           />
-          <button class="run-button" (click)="onRun()" [disabled]="!promptText() || isRunning()" aria-label="Run Flow">
-            @if (isRunning()) {
+          <button class="run-button" (click)="onRun()" [disabled]="(!promptText() && !isWaitingForInput) || (isRunning() && !isWaitingForInput)" aria-label="Run Flow">
+            @if (isRunning() && !isWaitingForInput) {
               <span class="spinner" aria-hidden="true"></span>
             } @else {
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                @if (isWaitingForInput) {
+                  <polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
+                } @else {
+                  <line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                }
+              </svg>
             }
           </button>
         </div>
@@ -140,10 +146,12 @@ export class PromptComponent {
   promptText = signal('');
   isRunning = signal(false);
 
+  @Input() isWaitingForInput = false;
+
   @Output() run = new EventEmitter<string>();
 
   onRun() {
-    if (this.promptText()) {
+    if (this.promptText() || this.isWaitingForInput) {
       this.run.emit(this.promptText());
     }
   }

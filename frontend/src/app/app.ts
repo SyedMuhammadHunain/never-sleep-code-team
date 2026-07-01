@@ -21,6 +21,8 @@ export class App implements OnInit {
   nodes = signal<Node[]>([]);
   edges = signal<Edge[]>([]);
   status = signal<'Idle' | 'Running' | 'Completed' | 'Failed'>('Idle');
+  logs = signal<string[]>([]);
+  isWaitingForInput = signal<boolean>(false);
 
   constructor(private apiService: ApiService, private toastService: ToastService) {}
 
@@ -59,8 +61,17 @@ export class App implements OnInit {
   private activeNodeInterval: any;
 
   onRun(prompt: string) {
+    if (this.status() === 'Running' && this.isWaitingForInput()) {
+      // User is providing input to a running workflow
+      this.apiService.sendInput(prompt);
+      this.isWaitingForInput.set(false);
+      this.promptComponent.promptText.set('');
+      return;
+    }
+
     this.promptComponent.setRunning(true);
     this.status.set('Running');
+    this.logs.set([]);
 
     // Clear nodes to show skeleton loader (Phase 4)
     this.nodes.set([]);
@@ -87,14 +98,35 @@ export class App implements OnInit {
       }, 1000);
     }, 2000);
 
-    this.apiService.runAgent(prompt).subscribe({
-      next: (res: RunResponse) => {
-        console.log('Result:', res);
-        clearInterval(this.activeNodeInterval);
-        this.clearActiveNodes();
-        this.promptComponent.setRunning(false);
-        this.status.set('Completed');
-        this.toastService.show('Workflow completed successfully', 'success');
+    this.apiService.runAgent(prompt);
+
+    this.apiService.messages$.subscribe({
+      next: (msg) => {
+        if (msg.type === 'stdout' || msg.type === 'stderr') {
+          const text = msg.data as string;
+          this.logs.update(l => [...l, text]);
+
+          // Heuristic to detect if waiting for input
+          if (text.trim().endsWith('?') || text.includes('y/N') || text.includes('Enter') || text.includes(']')) {
+            // Give it a tiny delay to ensure no more stdout arrives
+            setTimeout(() => {
+              this.isWaitingForInput.set(true);
+              this.promptComponent.setRunning(false);
+              this.promptComponent.promptText.set('');
+            }, 100);
+          }
+        } else if (msg.type === 'done') {
+          clearInterval(this.activeNodeInterval);
+          this.clearActiveNodes();
+          this.promptComponent.setRunning(false);
+          this.status.set(msg.code === 0 ? 'Completed' : 'Failed');
+          this.isWaitingForInput.set(false);
+          if (msg.code === 0) {
+            this.toastService.show('Workflow completed successfully', 'success');
+          } else {
+            this.toastService.show('Workflow failed to run', 'error');
+          }
+        }
       },
       error: (err) => {
         console.error('Error:', err);
@@ -102,7 +134,8 @@ export class App implements OnInit {
         this.clearActiveNodes();
         this.promptComponent.setRunning(false);
         this.status.set('Failed');
-        this.toastService.show('Workflow failed to run', 'error');
+        this.isWaitingForInput.set(false);
+        this.toastService.show('Workflow connection error', 'error');
       }
     });
   }
