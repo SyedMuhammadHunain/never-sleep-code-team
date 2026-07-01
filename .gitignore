@@ -20,3 +20,5 @@ frontend/coverage/
 # IDE
 .vscode/
 .idea/
+agent-skills/
+scratch.py

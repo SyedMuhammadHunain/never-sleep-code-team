@@ -3,3 +3,6 @@ project:
   architecture:
     agent_type: adk
     deployment_target: none
+acli_version: 0.5.0
+create_params:
+  deployment_target: cloud_run
